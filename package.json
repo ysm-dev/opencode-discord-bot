@@ -1,0 +1,39 @@
+{
+  "name": "opencode-discord-bot",
+  "version": "0.0.1",
+  "description": "Discord bot bridge for a self-hosted opencode instance",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "MIT",
+  "author": "ysm-dev <i@ysm.dev>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ysm-dev/opencode-discord-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ysm-dev/opencode-discord-bot/issues"
+  },
+  "homepage": "https://github.com/ysm-dev/opencode-discord-bot#readme",
+  "keywords": [
+    "opencode",
+    "discord",
+    "discord-bot",
+    "bot",
+    "bridge"
+  ],
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}
