@@ -66,8 +66,9 @@ export type ToolRequest = {
 export type ToolResponse = { readonly ok: true; readonly result: unknown } | { readonly ok: false; readonly error: string }
 
 export type OpencodeEvent =
-  | { readonly type: "text-delta"; readonly text: string }
-  | { readonly type: "text-snapshot"; readonly text: string }
+  | { readonly type: "text-delta"; readonly id?: string; readonly text: string }
+  | { readonly type: "text-snapshot"; readonly id?: string; readonly text: string }
+  | { readonly type: "reasoning-start" }
   | { readonly type: "tool-start"; readonly title: string }
   | { readonly type: "tool-end" }
   | { readonly type: "changed-files"; readonly files: number; readonly insertions: number; readonly deletions: number }

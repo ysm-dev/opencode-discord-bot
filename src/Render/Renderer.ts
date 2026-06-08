@@ -17,6 +17,12 @@ type PostedChunk = {
   content: string
 }
 
+type RenderSegment = {
+  readonly id: string | undefined
+  text: string
+  readonly posted: Array<PostedChunk>
+}
+
 const discordRetrySchedule = Schedule.fromStepWithMetadata(
   Effect.succeed((metadata: Schedule.InputMetadata<DiscordError>) => {
     if (metadata.attempt > 2) return Cause.done(metadata.attempt)
@@ -34,16 +40,31 @@ export const renderOpencodeEvents = Effect.fn("renderOpencodeEvents")(function* 
   config: RuntimeConfig,
   discord: DiscordService
 ) {
-  let answer = ""
   let changed: string | undefined
-  const posted: Array<PostedChunk> = []
+  const segments: Array<RenderSegment> = []
+  const segmentsById = new Map<string, RenderSegment>()
   const updateIntervalMs = Math.max(0, Duration.toMillis(config.streaming.updateInterval))
   let lastFlushAt = Number.NEGATIVE_INFINITY
   let typingFiber: Fiber.Fiber<void, never> | undefined
   let status: PostedChunk | undefined
   let finished = false
 
-  const visibleContent = () => sanitizeDiscordContent(changed === undefined ? answer : `${answer}\n\n${changed}`.trim(), config.guards)
+  const lastSegment = (): RenderSegment | undefined => segments[segments.length - 1]
+  const createSegment = (id: string | undefined): RenderSegment => {
+    const segment: RenderSegment = { id, text: "", posted: [] }
+    segments.push(segment)
+    if (id !== undefined) segmentsById.set(id, segment)
+    return segment
+  }
+  const getSegment = (id: string | undefined): RenderSegment => {
+    if (id !== undefined) return segmentsById.get(id) ?? createSegment(id)
+    const last = lastSegment()
+    return last !== undefined && last.id === undefined ? last : createSegment(undefined)
+  }
+  const visibleContent = (segment: RenderSegment) => {
+    const text = changed === undefined || lastSegment() !== segment ? segment.text : `${segment.text}\n\n${changed}`.trim()
+    return sanitizeDiscordContent(text, config.guards)
+  }
   const startTyping = Effect.fn("startDiscordTyping")(function* () {
     if (typingFiber !== undefined) return
     yield* retryDiscord(discord.sendTyping(scope)).pipe(Effect.catch(() => Effect.void))
@@ -72,39 +93,55 @@ export const renderOpencodeEvents = Effect.fn("renderOpencodeEvents")(function* 
       status.content = safe
     }
   })
-  const writeChunk = Effect.fn("writeDiscordRenderChunk")(function* (index: number, chunk: string, forceEdit = false) {
-    const existing = posted[index]
+  const writeChunk = Effect.fn("writeDiscordRenderChunk")(function* (
+    segment: RenderSegment,
+    index: number,
+    chunk: string,
+    forceEdit = false
+  ) {
+    const existing = segment.posted[index]
     if (existing === undefined) {
       const created = yield* retryDiscord(discord.postMessage(scope, chunk))
-      posted.push({ id: created.id, content: chunk })
+      segment.posted.push({ id: created.id, content: chunk })
     } else if (forceEdit || existing.content !== chunk) {
       yield* retryDiscord(discord.editMessage(scope, existing.id, chunk))
       existing.content = chunk
     }
   })
-  const flush = Effect.fn("flushDiscordRender")(function* (force = false, forceEdit = false) {
-    const chunks = splitDiscordMarkdown(visibleContent())
+  const flushSegment = Effect.fn("flushDiscordRenderSegment")(function* (segment: RenderSegment, force = false, forceEdit = false) {
+    const chunks = splitDiscordMarkdown(visibleContent(segment))
     if (chunks.length === 0) return
     const now = yield* Clock.currentTimeMillis
-    if (!force && posted.length > 0 && now - lastFlushAt < updateIntervalMs) return
+    if (!force && segment.posted.length > 0 && now - lastFlushAt < updateIntervalMs) return
     for (let index = 0; index < chunks.length; index += 1) {
       const chunk = chunks[index]
       if (chunk === undefined) continue
-      yield* writeChunk(index, chunk, forceEdit)
+      yield* writeChunk(segment, index, chunk, forceEdit)
     }
-    for (let index = posted.length - 1; index >= chunks.length; index -= 1) {
-      const stale = posted[index]
+    for (let index = segment.posted.length - 1; index >= chunks.length; index -= 1) {
+      const stale = segment.posted[index]
       if (stale === undefined) continue
       yield* retryDiscord(discord.deleteMessage(scope, stale.id))
-      posted.splice(index, 1)
+      segment.posted.splice(index, 1)
     }
     lastFlushAt = now
+  })
+  const prepareSegment = Effect.fn("prepareDiscordTextSegment")(function* (id: string | undefined) {
+    const previousLast = lastSegment()
+    const segment = getSegment(id)
+    if (changed !== undefined && previousLast !== undefined && previousLast !== segment) yield* flushSegment(previousLast, true)
+    return segment
+  })
+  const flushLastSegment = Effect.fn("flushLastDiscordRenderSegment")(function* (force = false, forceEdit = false) {
+    const segment = lastSegment()
+    if (segment === undefined) return
+    yield* flushSegment(segment, force, forceEdit)
   })
   const finish = Effect.fn("finishDiscordRender")(function* () {
     if (finished) return
     finished = true
     const wasTyping = yield* stopTyping()
-    yield* flush(true, wasTyping)
+    yield* flushLastSegment(true, wasTyping)
   })
 
   yield* startTyping()
@@ -122,26 +159,32 @@ export const renderOpencodeEvents = Effect.fn("renderOpencodeEvents")(function* 
               yield* renderStatus("Tool finished.")
               break
             }
+            case "reasoning-start": {
+              yield* startTyping()
+              break
+            }
             case "idle": {
               yield* finish()
               break
             }
             case "text-delta": {
               yield* stopTyping()
-              answer += event.text
-              yield* flush(posted.length === 0)
+              const segment = yield* prepareSegment(event.id)
+              segment.text += event.text
+              yield* flushSegment(segment, segment.posted.length === 0)
               break
             }
             case "text-snapshot": {
               yield* stopTyping()
-              answer = event.text
-              yield* flush(true)
+              const segment = yield* prepareSegment(event.id)
+              segment.text = event.text
+              yield* flushSegment(segment, true)
               break
             }
             case "changed-files": {
               if (config.streaming.changedFilesSummary && hasChangedFiles(event)) {
                 changed = changedSummary(event)
-                yield* flush(true)
+                yield* flushSegment(lastSegment() ?? createSegment(undefined), true)
               }
               break
             }

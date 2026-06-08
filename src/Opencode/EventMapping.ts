@@ -38,6 +38,24 @@ const textPart = (value: unknown): Readonly<Record<string, unknown>> | undefined
   return stringField(value, "type") === "text" ? value : undefined
 }
 
+const textId = (record: Readonly<Record<string, unknown>>): string | undefined =>
+  stringField(record, "textID") ?? stringField(record, "textId")
+
+const partId = (record: Readonly<Record<string, unknown>>): string | undefined =>
+  stringField(record, "id") ?? stringField(record, "partID") ?? stringField(record, "partId")
+
+const messagePartId = (
+  payload: Readonly<Record<string, unknown>>,
+  properties: Readonly<Record<string, unknown>>,
+  part: Readonly<Record<string, unknown>> | undefined
+): string | undefined =>
+  (part === undefined ? undefined : partId(part)) ??
+  textId(properties) ??
+  stringField(properties, "partID") ??
+  stringField(properties, "partId") ??
+  stringField(payload, "partID") ??
+  stringField(payload, "partId")
+
 const errorMessage = (value: unknown): string => {
   if (!isRecord(value)) return "Unknown opencode error"
   const properties = payloadProperties(value)
@@ -107,11 +125,15 @@ const decodeText = (properties: Readonly<Record<string, unknown>>, type: string 
   switch (type) {
     case "session.next.text.delta": {
       const delta = stringField(properties, "delta")
-      return delta === undefined ? undefined : { type: "text-delta", text: delta }
+      if (delta === undefined) return undefined
+      const id = textId(properties)
+      return id === undefined ? { type: "text-delta", text: delta } : { type: "text-delta", id, text: delta }
     }
     case "session.next.text.ended": {
       const text = stringField(properties, "text")
-      return text === undefined ? undefined : { type: "text-snapshot", text }
+      if (text === undefined) return undefined
+      const id = textId(properties)
+      return id === undefined ? { type: "text-snapshot", text } : { type: "text-snapshot", id, text }
     }
     default:
       return undefined
@@ -120,10 +142,12 @@ const decodeText = (properties: Readonly<Record<string, unknown>>, type: string 
 
 const textDelta = (
   payload: Readonly<Record<string, unknown>>,
-  properties: Readonly<Record<string, unknown>>
+  properties: Readonly<Record<string, unknown>>,
+  id: string | undefined
 ): OpencodeEvent | undefined => {
   const delta = stringField(properties, "delta") ?? stringField(payload, "delta")
-  return delta === undefined ? undefined : { type: "text-delta", text: delta }
+  if (delta === undefined) return undefined
+  return id === undefined ? { type: "text-delta", text: delta } : { type: "text-delta", id, text: delta }
 }
 
 const decodePartDelta = (
@@ -132,9 +156,13 @@ const decodePartDelta = (
   options: DecodeOptions
 ): OpencodeEvent | undefined => {
   const part = properties.part ?? payload.part
-  if (part !== undefined) return textPart(part) === undefined ? undefined : textDelta(payload, properties)
+  if (part !== undefined) {
+    const text = textPart(part)
+    return text === undefined ? undefined : textDelta(payload, properties, messagePartId(payload, properties, text))
+  }
   if (options.includeGenericPartDeltas !== true) return undefined
-  return stringField(properties, "field") === "text" ? textDelta(payload, properties) : undefined
+  const id = messagePartId(payload, properties, undefined)
+  return stringField(properties, "field") === "text" ? textDelta(payload, properties, id) : undefined
 }
 
 const decodePartUpdated = (
@@ -143,11 +171,16 @@ const decodePartUpdated = (
 ): OpencodeEvent | undefined => {
   const part = textPart(properties.part ?? payload.part)
   if (part === undefined) return undefined
-  const delta = textDelta(payload, properties)
+  const id = messagePartId(payload, properties, part)
+  const delta = textDelta(payload, properties, id)
   if (delta !== undefined) return delta
   const text = stringField(part, "text")
-  return text === undefined ? undefined : { type: "text-snapshot", text }
+  if (text === undefined) return undefined
+  return id === undefined ? { type: "text-snapshot", text } : { type: "text-snapshot", id, text }
 }
+
+const decodeReasoning = (type: string | undefined): OpencodeEvent | undefined =>
+  type === "session.next.reasoning.started" ? { type: "reasoning-start" } : undefined
 
 const decodePart = (
   payload: Readonly<Record<string, unknown>>,
@@ -213,6 +246,7 @@ export const decodeOpencodeEvent = (payload: unknown, options: DecodeOptions = {
   return (
     decodeLifecycle(event, type) ??
     decodeText(properties, type) ??
+    decodeReasoning(type) ??
     decodePart(event, properties, type, options) ??
     decodeTool(event, type) ??
     decodeStep(event, type)

@@ -59,6 +59,47 @@ describe("opencode event mapping", () => {
     expect(decodeOpencodeEvent({ type: "message.part.delta", part: { type: "reasoning" }, delta: "hidden" })).toBeUndefined()
   })
 
+  test("preserves text part ids and maps hidden reasoning to typing events", async () => {
+    const events = await Effect.runPromise(
+      opencodeEventStream(
+        Stream.fromIterable([
+          { type: "session.next.reasoning.started", properties: { sessionID: "s1", reasoningID: "r1" } },
+          { type: "session.next.text.delta", properties: { sessionID: "s1", textID: "text-1", delta: "hello" } },
+          { type: "session.next.text.ended", properties: { sessionID: "s1", textID: "text-1", text: "hello" } },
+          {
+            type: "message.updated",
+            properties: { sessionID: "s1", info: { id: "assistant-message", role: "assistant" } }
+          },
+          {
+            type: "message.part.delta",
+            properties: {
+              sessionID: "s1",
+              messageID: "assistant-message",
+              partID: "text-2",
+              part: { sessionID: "s1", messageID: "assistant-message", type: "text" },
+              delta: " second"
+            }
+          },
+          {
+            type: "message.part.updated",
+            properties: {
+              sessionID: "s1",
+              part: { id: "text-3", sessionID: "s1", messageID: "assistant-message", type: "text", text: "third" }
+            }
+          }
+        ])
+      ).pipe(Stream.runCollect)
+    )
+
+    expect(events).toEqual([
+      { type: "reasoning-start" },
+      { type: "text-delta", id: "text-1", text: "hello" },
+      { type: "text-snapshot", id: "text-1", text: "hello" },
+      { type: "text-delta", id: "text-2", text: " second" },
+      { type: "text-snapshot", id: "text-3", text: "third" }
+    ])
+  })
+
   test("maps wrapped SDK events and delta-bearing part updates", () => {
     expect(
       decodeOpencodeEvent({
@@ -183,6 +224,6 @@ describe("opencode event mapping", () => {
       ).pipe(Stream.runCollect)
     )
 
-    expect(events).toEqual([{ type: "text-snapshot", text: "Normal answer" }, { type: "idle" }])
+    expect(events).toEqual([{ type: "text-snapshot", id: "assistant-text", text: "Normal answer" }, { type: "idle" }])
   })
 })
