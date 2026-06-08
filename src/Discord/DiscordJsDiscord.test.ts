@@ -68,24 +68,11 @@ describe("makeDiscordJsDiscord", () => {
         calls.push(["delete", {}])
         return Promise.resolve({})
       },
-      pin: () => {
-        calls.push(["pin", {}])
-        return Promise.resolve({})
-      },
-      unpin: () => {
-        calls.push(["unpin", {}])
-        return Promise.resolve({})
-      },
       react: (emoji: string) => {
         calls.push(["react", emoji])
         return Promise.resolve({})
       },
-      reactions: {
-        cache: collection([{ emoji: { name: "rocket" }, count: 2 }]),
-        resolve: (emoji: string) => ({
-          users: { remove: (userId: string) => Promise.resolve(calls.push(["removeReaction", { emoji, userId }])) }
-        })
-      }
+      reactions: { cache: collection([{ emoji: { name: "rocket" }, count: 2 }]) }
     }
     const channel = {
       send: (content: unknown) => {
@@ -131,21 +118,15 @@ describe("makeDiscordJsDiscord", () => {
       await Effect.runPromise(discord.editMessage(scope, "m1", "edited"))
       await Effect.runPromise(discord.deleteMessage(scope, "m1"))
       await Effect.runPromise(discord.addReaction(scope, "m1", "rocket"))
-      await Effect.runPromise(discord.removeReaction(scope, "m1", "rocket"))
       const attached = await Effect.runPromise(discord.attachFile(scope, file))
       expect(await Effect.runPromise(discord.createThread(scope, "work"))).toEqual({ id: "thread-1" })
-      await Effect.runPromise(discord.pinMessage(scope, "m1"))
-      await Effect.runPromise(discord.unpinMessage(scope, "m1"))
 
       expect(context).toHaveLength(1)
       expect(history).toHaveLength(1)
       expect(posted).toEqual({ id: "posted-1" })
       expect(attached).toEqual({ path: "posted-1" })
-      expect(calls.map((call) => call[0])).toContain("removeReaction")
       expect(calls.map((call) => call[0])).toContain("delete")
       expect(calls.map((call) => call[0])).toContain("createThread")
-      expect(calls.map((call) => call[0])).toContain("pin")
-      expect(calls.map((call) => call[0])).toContain("unpin")
     } finally {
       await rm(directory, { recursive: true, force: true })
     }
@@ -178,8 +159,7 @@ describe("makeDiscordJsDiscord", () => {
     const fetchedMessage = {
       ...baseMessage(),
       edit: () => Promise.resolve({}),
-      react: () => Promise.resolve({}),
-      reactions: { resolve: () => null }
+      react: () => Promise.resolve({})
     }
     const channel = {
       send: () => Promise.resolve({ id: "posted-1" }),
@@ -190,14 +170,6 @@ describe("makeDiscordJsDiscord", () => {
     await expect(Effect.runPromise(discord.createThread(scope, "work"))).rejects.toMatchObject({
       _tag: "DiscordError",
       message: "Discord channel cannot create threads"
-    })
-    await expect(Effect.runPromise(discord.pinMessage(scope, "m1"))).rejects.toMatchObject({
-      _tag: "DiscordError",
-      message: "Discord message is not pinnable"
-    })
-    await expect(Effect.runPromise(discord.unpinMessage(scope, "m1"))).rejects.toMatchObject({
-      _tag: "DiscordError",
-      message: "Discord message is not unpinnable"
     })
     await expect(Effect.runPromise(discord.deleteMessage(scope, "m1"))).rejects.toMatchObject({
       _tag: "DiscordError",

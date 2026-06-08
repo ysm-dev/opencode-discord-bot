@@ -8,9 +8,7 @@ const RawToolsSchema = Schema.Struct({
   reactions: OptionalBoolean,
   attachFiles: OptionalBoolean,
   fetchHistory: OptionalBoolean,
-  createThread: OptionalBoolean,
-  editDeleteOwn: OptionalBoolean,
-  pin: OptionalBoolean
+  createThread: OptionalBoolean
 })
 
 export const RawConfigSchema = Schema.Struct({

@@ -14,7 +14,6 @@ export type LoopbackServerOptions = {
   readonly projectDir: string
   readonly discord: DiscordService
   readonly getAllowedScopes?: (() => ReadonlyArray<DiscordScope>) | undefined
-  readonly botId?: string | undefined
 }
 
 type LoopbackServer = {
@@ -48,8 +47,7 @@ const toolApiLayer = (options: LoopbackServerOptions) =>
       Effect.gen(function* () {
         const toolRequest = yield* parseBody(request)
         return yield* handleToolRequest(toolRequest, options.config, options.projectDir, options.discord, {
-          allowedScopes: options.getAllowedScopes?.() ?? [],
-          botId: options.botId
+          allowedScopes: options.getAllowedScopes?.() ?? []
         })
       }).pipe(Effect.catch((error) => Effect.succeed(toolFailure(error))))
     )

@@ -47,11 +47,6 @@ class FakeDiscordAdapter {
     return Promise.resolve()
   }
 
-  removeReaction(threadId: string, messageId: string, emoji: string): Promise<void> {
-    this.calls.push(["removeReaction", { threadId, messageId, emoji }])
-    return Promise.resolve()
-  }
-
   fetchMessages(threadId: string): Promise<FetchResult<unknown>> {
     this.calls.push(["fetchMessages", { threadId }])
     return Promise.resolve({
@@ -82,7 +77,6 @@ describe("makeChatSdkDiscord", () => {
     await Effect.runPromise(discord.editMessage(scope, posted.id, "edited"))
     await Effect.runPromise(discord.sendTyping(scope))
     await Effect.runPromise(discord.addReaction(scope, "m1", "rocket"))
-    await Effect.runPromise(discord.removeReaction(scope, "m1", "rocket"))
     const directory = await mkdtemp(join(tmpdir(), "ocdb-chat-"))
 
     try {
@@ -125,8 +119,6 @@ describe("makeChatSdkDiscord", () => {
       "startTyping",
       "encodeThreadId",
       "addReaction",
-      "encodeThreadId",
-      "removeReaction",
       "encodeThreadId",
       "postMessage"
     ])
@@ -222,18 +214,12 @@ describe("makeChatSdkDiscord REST operations", () => {
 
       await Effect.runPromise(discord.deleteMessage(scope, "m1"))
       expect(await Effect.runPromise(discord.createThread(scope, "work"))).toEqual({ id: "thread-1" })
-      await Effect.runPromise(discord.pinMessage(scope, "m1"))
-      await Effect.runPromise(discord.unpinMessage(scope, "m1"))
     } finally {
       globalThis.fetch = originalFetch
     }
 
     expect(adapter.calls.map((item) => item[0])).toEqual(["encodeThreadId", "deleteMessage"])
-    expect(requests.map((request) => [request[0], request[1].method])).toEqual([
-      ["https://discord.test/api/channels/c1/threads", "POST"],
-      ["https://discord.test/api/channels/t1/pins/m1", "PUT"],
-      ["https://discord.test/api/channels/t1/pins/m1", "DELETE"]
-    ])
+    expect(requests.map((request) => [request[0], request[1].method])).toEqual([["https://discord.test/api/channels/c1/threads", "POST"]])
   })
 
   test("fails raw REST operations when no raw Discord client is configured", async () => {

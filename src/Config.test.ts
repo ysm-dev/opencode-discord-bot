@@ -24,7 +24,7 @@ describe("loadConfigFromSources", () => {
           "threads": { "activeByRecentBotParticipation": false },
           "concurrency": { "strategy": "burst", "globalMaxActiveTurns": 4 },
           "guards": { "ignoreBots": false, "stripMassMentions": false, "redactSecretsInErrors": false, "maxTurnMs": 1000 },
-          "tools": { "createThread": true, "pin": true, "followUpMessages": true, "postOtherChannels": true }
+          "tools": { "createThread": true, "editDeleteOwn": true, "pin": true, "followUpMessages": true, "postOtherChannels": true }
         }`
       })
     )
@@ -47,7 +47,8 @@ describe("loadConfigFromSources", () => {
     expect(config.guards.maxTurn).toEqual(Duration.millis(1000))
     expect(config.tools.reactions).toBe(true)
     expect(config.tools.createThread).toBe(true)
-    expect(config.tools.pin).toBe(true)
+    expect("editDeleteOwn" in config.tools).toBe(false)
+    expect("pin" in config.tools).toBe(false)
     expect("followUpMessages" in config.tools).toBe(false)
     expect("postOtherChannels" in config.tools).toBe(false)
   })
@@ -61,6 +62,8 @@ describe("loadConfigFromSources", () => {
     expect(config.bridge.port).toBe(8787)
     expect(config.context.messages).toBe(30)
     expect(config.tools.autoInstall).toBe(true)
+    expect("editDeleteOwn" in config.tools).toBe(false)
+    expect("pin" in config.tools).toBe(false)
     expect("followUpMessages" in config.tools).toBe(false)
     expect("postOtherChannels" in config.tools).toBe(false)
   })
@@ -106,11 +109,11 @@ describe("loadConfigFromSources", () => {
     const cwd = await mkdtemp(join(tmpdir(), "ocdb-config-"))
 
     try {
-      await writeFile(join(cwd, ".opencode-discord.jsonc"), `{ "contextMessages": 7, "tools": { "pin": true } }`)
+      await writeFile(join(cwd, ".opencode-discord.jsonc"), `{ "contextMessages": 7, "tools": { "createThread": true } }`)
       const config = await Effect.runPromise(loadConfig({ cwd, env: { DISCORD_TOKEN: "token" } }))
 
       expect(config.context.messages).toBe(7)
-      expect(config.tools.pin).toBe(true)
+      expect(config.tools.createThread).toBe(true)
     } finally {
       await rm(cwd, { recursive: true, force: true })
     }

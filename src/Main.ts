@@ -107,8 +107,7 @@ export const makeApplication = (options: ApplicationOptions) => {
     handleStop: (scope: DiscordScope) => handleStopCommand(scope, turns, options.discord),
     handleTool: (request: ToolRequest) =>
       handleToolRequest(request, options.config, options.config.opencode.projectDir, options.discord, {
-        allowedScopes: [...activeToolScopes.values()],
-        botId: options.bot.userId
+        allowedScopes: [...activeToolScopes.values()]
       }),
     startLoopback: (port = options.config.bridge.port) =>
       startLoopbackServer({
@@ -116,8 +115,7 @@ export const makeApplication = (options: ApplicationOptions) => {
         config: options.config,
         projectDir: options.config.opencode.projectDir,
         discord: options.discord,
-        getAllowedScopes: () => [...activeToolScopes.values()],
-        botId: options.bot.userId
+        getAllowedScopes: () => [...activeToolScopes.values()]
       })
   }
 }

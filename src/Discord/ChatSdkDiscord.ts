@@ -13,7 +13,6 @@ type ChatDiscordAdapter = {
   readonly deleteMessage: (threadId: string, messageId: string) => Promise<void>
   readonly startTyping: (threadId: string, status?: string) => Promise<void>
   readonly addReaction: (threadId: string, messageId: string, emoji: string) => Promise<void>
-  readonly removeReaction: (threadId: string, messageId: string, emoji: string) => Promise<void>
   readonly fetchMessages: (threadId: string, options?: FetchOptions) => Promise<FetchResult<unknown>>
 }
 
@@ -223,8 +222,6 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
       tryAdapter(() => adapter.deleteMessage(threadIdFromScope(adapter, scope), messageId)).pipe(Effect.asVoid),
     addReaction: (scope, messageId, emoji) =>
       tryAdapter(() => adapter.addReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
-    removeReaction: (scope, messageId, emoji) =>
-      tryAdapter(() => adapter.removeReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
     attachFile: (scope, path) =>
       tryAdapter(async () => {
         const file: PostableRaw = { raw: "", files: [{ filename: basename(path), data: await readFile(path) }] }
@@ -235,11 +232,7 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
       rawDiscord(raw, `/channels/${scope.channelId}/threads`, {
         method: "POST",
         body: JSON.stringify({ name, type: 11 })
-      }).pipe(Effect.map((data) => ({ id: isRecord(data) && typeof data.id === "string" ? data.id : "" }))),
-    pinMessage: (scope, messageId) =>
-      rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "PUT" }).pipe(Effect.asVoid),
-    unpinMessage: (scope, messageId) =>
-      rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "DELETE" }).pipe(Effect.asVoid)
+      }).pipe(Effect.map((data) => ({ id: isRecord(data) && typeof data.id === "string" ? data.id : "" })))
   }
 }
 

@@ -18,8 +18,6 @@ export type ToolConfig = {
   readonly attachFiles: boolean
   readonly fetchHistory: boolean
   readonly createThread: boolean
-  readonly editDeleteOwn: boolean
-  readonly pin: boolean
 }
 
 export type RuntimeConfig = {
@@ -94,9 +92,7 @@ export const defaultConfig: RuntimeConfig = {
     reactions: true,
     attachFiles: true,
     fetchHistory: true,
-    createThread: false,
-    editDeleteOwn: false,
-    pin: false
+    createThread: false
   },
   streaming: {
     updateInterval: Duration.millis(500),
@@ -259,9 +255,7 @@ export const loadConfigFromSources = Effect.fn("loadConfigFromSources")(function
       reactions: readBoolean(tools, "reactions", defaultConfig.tools.reactions),
       attachFiles: readBoolean(tools, "attachFiles", defaultConfig.tools.attachFiles),
       fetchHistory: readBoolean(tools, "fetchHistory", defaultConfig.tools.fetchHistory),
-      createThread: readBoolean(tools, "createThread", defaultConfig.tools.createThread),
-      editDeleteOwn: readBoolean(tools, "editDeleteOwn", defaultConfig.tools.editDeleteOwn),
-      pin: readBoolean(tools, "pin", defaultConfig.tools.pin)
+      createThread: readBoolean(tools, "createThread", defaultConfig.tools.createThread)
     },
     streaming: {
       updateInterval: Duration.millis(readNumber(streaming, "updateIntervalMs", 500)),

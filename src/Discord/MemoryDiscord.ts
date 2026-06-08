@@ -15,12 +15,11 @@ export type MemoryDiscord = DiscordService & {
     readonly scope: DiscordScope
     readonly messageId: string
     readonly emoji: string
-    readonly op: "add" | "remove"
+    readonly op: "add"
   }>
   readonly attachments: Array<{ readonly scope: DiscordScope; readonly path: string }>
   readonly threads: Array<{ readonly scope: DiscordScope; readonly name: string }>
   readonly deletes: Array<{ readonly scope: DiscordScope; readonly messageId: string }>
-  readonly pins: Array<{ readonly scope: DiscordScope; readonly messageId: string; readonly op: "pin" | "unpin" }>
 }
 
 export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord => {
@@ -33,7 +32,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
   const attachments: MemoryDiscord["attachments"] = []
   const threads: MemoryDiscord["threads"] = []
   const deletes: MemoryDiscord["deletes"] = []
-  const pins: MemoryDiscord["pins"] = []
 
   return {
     context,
@@ -44,7 +42,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
     attachments,
     threads,
     deletes,
-    pins,
     fetchContext: (_scope, limit) => Effect.succeed(context.slice(Math.max(0, context.length - limit))),
     sendTyping: (scope) => Effect.sync(() => typingScopes.push(scope)).pipe(Effect.asVoid),
     postMessage: (scope, content) =>
@@ -55,8 +52,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
       }),
     editMessage: (scope, messageId, content) => Effect.sync(() => edits.push({ scope, messageId, content })).pipe(Effect.asVoid),
     addReaction: (scope, messageId, emoji) => Effect.sync(() => reactions.push({ scope, messageId, emoji, op: "add" })).pipe(Effect.asVoid),
-    removeReaction: (scope, messageId, emoji) =>
-      Effect.sync(() => reactions.push({ scope, messageId, emoji, op: "remove" })).pipe(Effect.asVoid),
     fetchHistory: (_scope, limit) => Effect.succeed(context.slice(Math.max(0, context.length - limit))),
     attachFile: (scope, path) =>
       Effect.sync(() => {
@@ -69,8 +64,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
         threads.push({ scope, name })
         return { id: `thread-${nextId}` }
       }),
-    deleteMessage: (scope, messageId) => Effect.sync(() => deletes.push({ scope, messageId })).pipe(Effect.asVoid),
-    pinMessage: (scope, messageId) => Effect.sync(() => pins.push({ scope, messageId, op: "pin" })).pipe(Effect.asVoid),
-    unpinMessage: (scope, messageId) => Effect.sync(() => pins.push({ scope, messageId, op: "unpin" })).pipe(Effect.asVoid)
+    deleteMessage: (scope, messageId) => Effect.sync(() => deletes.push({ scope, messageId })).pipe(Effect.asVoid)
   }
 }

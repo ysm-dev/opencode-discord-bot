@@ -57,11 +57,6 @@ type DiscordFetchedMessageLike = DiscordJsMessageLike & {
   readonly edit: (content: string) => Promise<unknown>
   readonly react: (emoji: string) => Promise<unknown>
   readonly delete?: () => Promise<unknown>
-  readonly pin?: () => Promise<unknown>
-  readonly unpin?: () => Promise<unknown>
-  readonly reactions: DiscordJsMessageLike["reactions"] & {
-    readonly resolve: (emoji: string) => { readonly users: { readonly remove: (userId: string) => Promise<unknown> } } | null
-  }
 }
 
 export type DiscordJsChannelLike = {
@@ -227,12 +222,6 @@ export const makeDiscordJsDiscord = (client: DiscordJsClientLike): DiscordServic
       const message = yield* fetchMessage(client, scope, messageId)
       yield* tryDiscord(() => message.react(emoji))
     }),
-  removeReaction: (scope, messageId, emoji) =>
-    Effect.gen(function* () {
-      const message = yield* fetchMessage(client, scope, messageId)
-      const reaction = message.reactions.resolve(emoji)
-      if (reaction !== null && client.user !== null) yield* tryDiscord(() => reaction.users.remove(client.user?.id ?? ""))
-    }),
   attachFile: (scope, path) =>
     Effect.gen(function* () {
       const channel = yield* fetchTextChannel(client, scope)
@@ -245,17 +234,5 @@ export const makeDiscordJsDiscord = (client: DiscordJsClientLike): DiscordServic
       const channel = yield* fetchTextChannel(client, scope)
       if (channel.threads === undefined) return yield* Effect.fail(new DiscordError({ message: "Discord channel cannot create threads" }))
       return yield* tryDiscord(() => channel.threads?.create({ name }) ?? Promise.resolve({ id: "" }))
-    }),
-  pinMessage: (scope, messageId) =>
-    Effect.gen(function* () {
-      const message = yield* fetchMessage(client, scope, messageId)
-      if (message.pin === undefined) return yield* Effect.fail(new DiscordError({ message: "Discord message is not pinnable" }))
-      yield* tryDiscord(() => message.pin?.() ?? Promise.resolve())
-    }),
-  unpinMessage: (scope, messageId) =>
-    Effect.gen(function* () {
-      const message = yield* fetchMessage(client, scope, messageId)
-      if (message.unpin === undefined) return yield* Effect.fail(new DiscordError({ message: "Discord message is not unpinnable" }))
-      yield* tryDiscord(() => message.unpin?.() ?? Promise.resolve())
     })
 })

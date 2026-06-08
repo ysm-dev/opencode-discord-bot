@@ -30,7 +30,6 @@ describe("makeMemoryDiscord", () => {
     const posted = await Effect.runPromise(discord.postMessage(scope, "hello"))
     await Effect.runPromise(discord.editMessage(scope, posted.id, "updated"))
     await Effect.runPromise(discord.addReaction(scope, "m1", "rocket"))
-    await Effect.runPromise(discord.removeReaction(scope, "m1", "rocket"))
     const attached = await Effect.runPromise(discord.attachFile(scope, "/repo/out.txt"))
 
     expect(context.map((item) => item.id)).toEqual(["2"])
@@ -38,7 +37,7 @@ describe("makeMemoryDiscord", () => {
     expect(posted).toEqual({ id: "posted-1" })
     expect(discord.messages).toEqual([{ scope, content: "hello" }])
     expect(discord.edits).toEqual([{ scope, messageId: "posted-1", content: "updated" }])
-    expect(discord.reactions.map((item) => item.op)).toEqual(["add", "remove"])
+    expect(discord.reactions.map((item) => item.op)).toEqual(["add"])
     expect(attached).toEqual({ path: "/repo/out.txt" })
   })
 })

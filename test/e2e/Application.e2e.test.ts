@@ -69,10 +69,10 @@ describe("application e2e", () => {
       releaseTurn?.()
       await running
 
-      const toolFile = await readFile(join(projectDir, ".opencode", "tools", "discord-bridge.ts"), "utf8")
+      const toolFile = await readFile(join(projectDir, ".opencode", "tools", "discord-add-reaction.ts"), "utf8")
       expect(toolFile).toContain("http://127.0.0.1:8787/tool")
-      expect(toolFile).not.toContain('"followUpMessage"')
-      expect(toolFile).not.toContain('"postOtherChannel"')
+      expect(toolFile).toContain('action: "addReaction"')
+      expect(toolFile).not.toContain("removeReaction")
       expect(prompts[0]?.prompt).toContain("plan.txt [text/plain; 10 bytes; file://")
       expect(prompts[0]?.prompt).toContain("(discord default scope: guildId=g1 channelId=c1)")
       expect(prompts[0]?.prompt).toContain("messageId=m1")

@@ -3,18 +3,15 @@ import { isAbsolute, resolve, sep } from "node:path"
 import { Effect } from "effect"
 import type { RuntimeConfig, ToolConfig } from "../Config.ts"
 import type { DiscordService } from "../Discord/DiscordPort.ts"
-import { sanitizeDiscordContent } from "../Discord/Safety.ts"
 import type { DiscordScope, ToolRequest, ToolResponse } from "../Schema.ts"
 
 type ToolRequestOptions = {
   readonly allowedScopes?: ReadonlyArray<DiscordScope> | undefined
-  readonly botId?: string | undefined
 }
 
 const actionFlag = (action: string): keyof ToolConfig | undefined => {
   switch (action) {
     case "addReaction":
-    case "removeReaction":
       return "reactions"
     case "attachFile":
       return "attachFiles"
@@ -22,12 +19,6 @@ const actionFlag = (action: string): keyof ToolConfig | undefined => {
       return "fetchHistory"
     case "createThread":
       return "createThread"
-    case "editOwnMessage":
-    case "deleteOwnMessage":
-      return "editDeleteOwn"
-    case "pin":
-    case "unpin":
-      return "pin"
     default:
       return undefined
   }
@@ -70,21 +61,12 @@ const attachmentPath = Effect.fn("attachmentPath")(function* (projectDir: string
 
 const disabled = (action: string): ToolResponse => ({ ok: false, error: `Action ${action} is disabled` })
 
-const reaction = Effect.fn("toolReaction")(function* (
-  request: ToolRequest,
-  scope: DiscordScope,
-  discord: DiscordService,
-  operation: "add" | "remove"
-) {
+const addReaction = Effect.fn("toolAddReaction")(function* (request: ToolRequest, scope: DiscordScope, discord: DiscordService) {
   const messageId = request.target.messageId
   const emoji = stringArg(request, "emoji")
   if (messageId === undefined || emoji === undefined) return { ok: false, error: "messageId and emoji are required" } satisfies ToolResponse
-  if (operation === "add") {
-    yield* discord.addReaction(scope, messageId, emoji)
-    return { ok: true, result: { reacted: true } } satisfies ToolResponse
-  }
-  yield* discord.removeReaction(scope, messageId, emoji)
-  return { ok: true, result: { reacted: false } } satisfies ToolResponse
+  yield* discord.addReaction(scope, messageId, emoji)
+  return { ok: true, result: { reacted: true } } satisfies ToolResponse
 })
 
 const fetchHistory = Effect.fn("toolFetchHistory")(function* (
@@ -120,69 +102,6 @@ const createThread = Effect.fn("toolCreateThread")(function* (request: ToolReque
   return { ok: true, result } satisfies ToolResponse
 })
 
-const ensureOwnMessage = Effect.fn("ensureOwnDiscordMessage")(function* (
-  messageId: string,
-  scope: DiscordScope,
-  config: RuntimeConfig,
-  discord: DiscordService,
-  options: ToolRequestOptions
-) {
-  if (options.botId === undefined) return "Bot identity is required to edit or delete bot-authored messages"
-  const history = yield* discord.fetchHistory(scope, config.context.messages)
-  const message = history.find((item) => item.id === messageId)
-  if (message?.author.id !== options.botId) return "messageId must refer to a bot-authored message"
-  return undefined
-})
-
-const editOwnMessage = Effect.fn("toolEditOwnMessage")(function* (
-  request: ToolRequest,
-  scope: DiscordScope,
-  config: RuntimeConfig,
-  discord: DiscordService,
-  options: ToolRequestOptions
-) {
-  const messageId = request.target.messageId
-  const content = stringArg(request, "content")
-  if (messageId === undefined || content === undefined || content.trim() === "") {
-    return { ok: false, error: "messageId and content are required" } satisfies ToolResponse
-  }
-  const ownMessageError = yield* ensureOwnMessage(messageId, scope, config, discord, options)
-  if (ownMessageError !== undefined) return { ok: false, error: ownMessageError } satisfies ToolResponse
-  yield* discord.editMessage(scope, messageId, sanitizeDiscordContent(content, config.guards))
-  return { ok: true, result: { edited: true } } satisfies ToolResponse
-})
-
-const deleteOwnMessage = Effect.fn("toolDeleteOwnMessage")(function* (
-  request: ToolRequest,
-  scope: DiscordScope,
-  config: RuntimeConfig,
-  discord: DiscordService,
-  options: ToolRequestOptions
-) {
-  const messageId = request.target.messageId
-  if (messageId === undefined) return { ok: false, error: "messageId is required" } satisfies ToolResponse
-  const ownMessageError = yield* ensureOwnMessage(messageId, scope, config, discord, options)
-  if (ownMessageError !== undefined) return { ok: false, error: ownMessageError } satisfies ToolResponse
-  yield* discord.deleteMessage(scope, messageId)
-  return { ok: true, result: { deleted: true } } satisfies ToolResponse
-})
-
-const pin = Effect.fn("toolPin")(function* (
-  request: ToolRequest,
-  scope: DiscordScope,
-  discord: DiscordService,
-  operation: "pin" | "unpin"
-) {
-  const messageId = request.target.messageId
-  if (messageId === undefined) return { ok: false, error: "messageId is required" } satisfies ToolResponse
-  if (operation === "pin") {
-    yield* discord.pinMessage(scope, messageId)
-    return { ok: true, result: { pinned: true } } satisfies ToolResponse
-  }
-  yield* discord.unpinMessage(scope, messageId)
-  return { ok: true, result: { pinned: false } } satisfies ToolResponse
-})
-
 export const handleToolRequest = Effect.fn("handleToolRequest")(function* (
   request: ToolRequest,
   config: RuntimeConfig,
@@ -203,23 +122,13 @@ export const handleToolRequest = Effect.fn("handleToolRequest")(function* (
 
   switch (request.action) {
     case "addReaction":
-      return yield* reaction(request, scope, discord, "add")
-    case "removeReaction":
-      return yield* reaction(request, scope, discord, "remove")
+      return yield* addReaction(request, scope, discord)
     case "fetchHistory":
       return yield* fetchHistory(request, scope, config, discord)
     case "attachFile":
       return yield* attachFile(request, scope, config, projectDir, discord)
     case "createThread":
       return yield* createThread(request, scope, discord)
-    case "editOwnMessage":
-      return yield* editOwnMessage(request, scope, config, discord, options)
-    case "deleteOwnMessage":
-      return yield* deleteOwnMessage(request, scope, config, discord, options)
-    case "pin":
-      return yield* pin(request, scope, discord, "pin")
-    case "unpin":
-      return yield* pin(request, scope, discord, "unpin")
   }
   return { ok: false, error: `Unknown action ${request.action}` } satisfies ToolResponse
 })

@@ -137,14 +137,6 @@ describe("handleToolRequest action dispatch", () => {
           discord
         )
       )
-      const remove = await Effect.runPromise(
-        handleToolRequest(
-          { action: "removeReaction", target: { guildId: "g1", channelId: "c1", messageId: "m1" }, args: { emoji: "rocket" } },
-          defaultConfig,
-          projectDir,
-          discord
-        )
-      )
       const history = await Effect.runPromise(
         handleToolRequest(
           { action: "fetchHistory", target: { guildId: "g1", channelId: "c1" }, args: { limit: 1 } },
@@ -164,10 +156,9 @@ describe("handleToolRequest action dispatch", () => {
       const attachmentRealpath = await realpath(join(projectDir, "out", "report.txt"))
 
       expect(add).toEqual({ ok: true, result: { reacted: true } })
-      expect(remove).toEqual({ ok: true, result: { reacted: false } })
       expect(history.ok).toBe(true)
       expect(attach).toEqual({ ok: true, result: { path: attachmentRealpath } })
-      expect(discord.reactions.map((item) => item.op)).toEqual(["add", "remove"])
+      expect(discord.reactions.map((item) => item.op)).toEqual(["add"])
       expect(discord.attachments).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, path: attachmentRealpath }])
     } finally {
       await rm(projectDir, { recursive: true, force: true })

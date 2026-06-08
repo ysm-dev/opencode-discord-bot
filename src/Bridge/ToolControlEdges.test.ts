@@ -24,22 +24,3 @@ test("rejects missing attachment files inside the project", async () => {
     await rm(projectDir, { recursive: true, force: true })
   }
 })
-
-test("rejects incomplete high-risk tool payloads before dispatch", async () => {
-  const config = {
-    ...defaultConfig,
-    tools: { ...defaultConfig.tools, editDeleteOwn: true }
-  }
-  const discord = makeMemoryDiscord()
-
-  const edit = await Effect.runPromise(
-    handleToolRequest(
-      { action: "editOwnMessage", target: { guildId: "g1", channelId: "c1", messageId: "m1" }, args: {} },
-      config,
-      "/repo",
-      discord
-    )
-  )
-
-  expect(edit).toEqual({ ok: false, error: "messageId and content are required" })
-})
