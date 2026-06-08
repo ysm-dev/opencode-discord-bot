@@ -1,5 +1,5 @@
 import type { OpencodePromptFilePart } from "../Opencode/OpencodePort.ts"
-import type { DiscordMessage } from "../Schema.ts"
+import type { DiscordMessage, DiscordScope } from "../Schema.ts"
 
 export type ContextPrompt = {
   readonly text: string
@@ -18,7 +18,7 @@ type ContextInput = {
 }
 
 const preamble = (botUserId: string) =>
-  `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord. Use discord target metadata when calling non-message bridge tools. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
+  `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord. For non-message bridge tools, combine the discord default scope or message target override with the header messageId. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
 
 const timestamp = (value: string): string => {
   const date = new Date(value)
@@ -42,10 +42,23 @@ const reactionSummary = (message: DiscordMessage): string | undefined => {
   return `(reactions: ${message.reactions.map((item) => `${item.emoji} x${item.count}`).join(", ")})`
 }
 
-const targetSummary = (message: DiscordMessage): string => {
-  const thread = message.threadId === undefined ? "" : ` threadId=${message.threadId}`
-  return `(discord target: guildId=${message.guildId} channelId=${message.channelId}${thread} messageId=${message.id})`
+const scopeOf = (message: DiscordMessage): DiscordScope => ({
+  guildId: message.guildId,
+  channelId: message.channelId,
+  ...(message.threadId === undefined ? {} : { threadId: message.threadId })
+})
+
+const sameScope = (left: DiscordScope, right: DiscordScope): boolean =>
+  left.guildId === right.guildId && left.channelId === right.channelId && left.threadId === right.threadId
+
+const scopeSummary = (scope: DiscordScope): string => {
+  const thread = scope.threadId === undefined ? "" : ` threadId=${scope.threadId}`
+  return `guildId=${scope.guildId} channelId=${scope.channelId}${thread}`
 }
+
+const defaultScopeSummary = (scope: DiscordScope): string => `(discord default scope: ${scopeSummary(scope)})`
+
+const targetSummary = (scope: DiscordScope): string => `(discord target: ${scopeSummary(scope)})`
 
 const isForwardableMime = (mime: string): boolean =>
   mime.startsWith("image/") || mime === "application/pdf" || mime.startsWith("audio/") || mime.startsWith("text/")
@@ -59,10 +72,11 @@ const attachmentParts = (messages: ReadonlyArray<DiscordMessage>, maxBytes: numb
     })
   )
 
-export const formatDiscordMessage = (message: DiscordMessage): string => {
+export const formatDiscordMessage = (message: DiscordMessage, defaultScope?: DiscordScope): string => {
   const label = message.author.nickname ?? message.author.displayName
-  const lines = [`[${label} | <@${message.author.id}> | ${timestamp(message.timestamp)}]`, message.content]
-  lines.push(targetSummary(message))
+  const scope = scopeOf(message)
+  const lines = [`[${label} | <@${message.author.id}> | ${timestamp(message.timestamp)} | messageId=${message.id}]`, message.content]
+  if (defaultScope === undefined || !sameScope(scope, defaultScope)) lines.push(targetSummary(scope))
   const attachments = attachmentSummary(message)
   const reactions = reactionSummary(message)
   if (attachments !== undefined) lines.push(attachments)
@@ -99,9 +113,14 @@ const renderPrompt = (
   skippedMessages: ReadonlyArray<DiscordMessage>
 ): string => {
   const skippedIds = new Set(skippedMessages.map((message) => message.id))
+  const latestMessage = messages.at(-1)
+  const defaultScope = latestMessage === undefined ? undefined : scopeOf(latestMessage)
   return [
     preamble(botUserId),
-    ...messages.map((message) => `${skippedIds.has(message.id) ? "(queued intermediate message)\n" : ""}${formatDiscordMessage(message)}`)
+    ...(defaultScope === undefined ? [] : [defaultScopeSummary(defaultScope)]),
+    ...messages.map(
+      (message) => `${skippedIds.has(message.id) ? "(queued intermediate message)\n" : ""}${formatDiscordMessage(message, defaultScope)}`
+    )
   ].join("\n\n")
 }
 

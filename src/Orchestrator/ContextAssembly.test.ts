@@ -31,9 +31,9 @@ describe("context assembly", () => {
       })
     )
 
-    expect(rendered).toContain("[Nick 1 | <@u-1> | 2026-06-05 14:03 UTC]")
+    expect(rendered).toContain("[Nick 1 | <@u-1> | 2026-06-05 14:03 UTC | messageId=1]")
     expect(rendered).toContain("Can you refactor this?")
-    expect(rendered).toContain("(discord target: guildId=g1 channelId=c1 messageId=1)")
+    expect(rendered).toContain("(discord target: guildId=g1 channelId=c1)")
     expect(rendered).toContain("(attachments: screenshot.png [image/png; 12 bytes; https://cdn/a1])")
     expect(rendered).toContain("(reactions: thumbs_up x2, tada x1)")
   })
@@ -54,8 +54,28 @@ describe("context assembly", () => {
     expect(prompt.text).toContain("Plain assistant text is streamed to Discord automatically")
     expect(prompt.text).toContain("do not use bridge tools to send messages")
     expect(prompt.text).toContain("<@id> pings that user in Discord")
-    expect(prompt.text).toContain("Use discord target metadata when calling non-message bridge tools")
+    expect(prompt.text).toContain("combine the discord default scope or message target override with the header messageId")
     expect(prompt.text).toContain("Do not emit @everyone, @here, or role pings")
+    expect(prompt.text).toContain("(discord default scope: guildId=g1 channelId=c1)")
+    expect(prompt.text).toContain("[Nick 3 | <@u-3> | 2026-06-05 14:03 UTC | messageId=3]")
+    expect(prompt.text).not.toContain("(discord target: guildId=g1 channelId=c1 messageId=3)")
+  })
+
+  test("renders a target override when a message scope differs from the default", () => {
+    const trigger = makeMessage("2", "trigger")
+    const prompt = assembleContextPrompt({
+      botUserId: "999",
+      contextMessages: [makeMessage("1", "different channel", { channelId: "c2", threadId: "t2" })],
+      triggerMessage: trigger,
+      maxMessages: 30,
+      maxChars: 10_000,
+      maxAttachmentBytes: 10_000
+    })
+
+    expect(prompt.text).toContain("(discord default scope: guildId=g1 channelId=c1)")
+    expect(prompt.text).toContain("[Nick 1 | <@u-1> | 2026-06-05 14:03 UTC | messageId=1]")
+    expect(prompt.text).toContain("(discord target: guildId=g1 channelId=c2 threadId=t2)")
+    expect(prompt.text).not.toContain("(discord target: guildId=g1 channelId=c1)")
   })
 
   test("applies top-N and character budgets without dropping the trigger", () => {
