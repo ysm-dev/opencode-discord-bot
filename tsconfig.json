@@ -11,7 +11,9 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "strict": true,
-    "target": "ES2023"
+    "target": "ES2023",
+    "types": ["bun"],
+    "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["scripts/**/*.ts", "src/**/*.ts", "test/**/*.ts"]
 }

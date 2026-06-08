@@ -1,0 +1,12 @@
+pre-commit:
+  commands:
+    biome:
+      glob: "*.{ts,json,jsonc,md,yml,yaml}"
+      run: bunx biome check {staged_files}
+    typecheck:
+      run: bun run typecheck
+
+commit-msg:
+  commands:
+    commitlint:
+      run: bunx commitlint --edit {1}

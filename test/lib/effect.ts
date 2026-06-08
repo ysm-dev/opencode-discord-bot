@@ -1,0 +1,81 @@
+import { type TestOptions, test } from "bun:test"
+import { Cause, type Duration, Effect, Exit, Layer } from "effect"
+import type * as Scope from "effect/Scope"
+import * as TestClock from "effect/testing/TestClock"
+import * as TestConsole from "effect/testing/TestConsole"
+
+type Body<A, E, R> = Effect.Effect<A, E, R> | (() => Effect.Effect<A, E, R>)
+
+const body = <A, E, R>(value: Body<A, E, R>) => Effect.suspend(() => (typeof value === "function" ? value() : value))
+
+type Runner = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer<R, E2>) => Promise<A>
+
+const isolatedRun: Runner = (value, layer) =>
+  Effect.gen(function* () {
+    const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(layer), Effect.exit)
+    if (Exit.isFailure(exit)) {
+      for (const err of Cause.prettyErrors(exit.cause)) {
+        yield* Effect.logError(err)
+      }
+    }
+    return yield* exit
+  }).pipe(Effect.runPromise)
+
+const make = <R, E>(testLayer: Layer.Layer<R, E>, liveLayer: Layer.Layer<R, E>, run: Runner = isolatedRun) => {
+  const effect = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test(name, () => run(value, testLayer), opts)
+
+  effect.only = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test.only(name, () => run(value, testLayer), opts)
+
+  effect.skip = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test.skip(name, () => run(value, testLayer), opts)
+
+  const live = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test(name, () => run(value, liveLayer), opts)
+
+  live.only = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test.only(name, () => run(value, liveLayer), opts)
+
+  live.skip = <A, E2>(name: string, value: Body<A, E2, R | Scope.Scope>, opts?: number | TestOptions) =>
+    test.skip(name, () => run(value, liveLayer), opts)
+
+  return { effect, live }
+}
+
+// Test environment with TestClock and TestConsole
+const testEnv = Layer.mergeAll(TestConsole.layer, TestClock.layer())
+
+// Live environment - uses real clock, but keeps TestConsole for output capture
+const liveEnv = TestConsole.layer
+
+export const it = make<never, never>(testEnv, liveEnv)
+
+export const testEffect = <R, E>(layer: Layer.Layer<R, E>) =>
+  make<R, E>(Layer.provideMerge(layer, testEnv), Layer.provideMerge(layer, liveEnv))
+
+export const awaitWithTimeout = <A, E, R>(self: Effect.Effect<A, E, R>, message: string, duration: Duration.Input = "2 seconds") =>
+  self.pipe(
+    Effect.timeoutOrElse({
+      duration,
+      orElse: () => Effect.fail(new Error(message))
+    })
+  )
+
+export const pollWithTimeout = <A, E, R>(
+  self: Effect.Effect<A | undefined, E, R>,
+  message: string,
+  duration: Duration.Input = "5 seconds"
+) =>
+  Effect.gen(function* () {
+    while (true) {
+      const result = yield* self
+      if (result !== undefined) return result
+      yield* Effect.sleep("20 millis")
+    }
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration,
+      orElse: () => Effect.fail(new Error(message))
+    })
+  )

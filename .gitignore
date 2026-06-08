@@ -11,6 +11,10 @@ lerna-debug.log*
 node_modules/
 jspm_packages/
 
+# Bun
+.bun/
+bunfig.toml.local
+
 # Build outputs
 dist/
 build/
@@ -22,6 +26,15 @@ out/
 .eslintcache
 .cache
 .parcel-cache
+.vitest/
+
+# Local references and scratch data
+.opencode/references/
+tmp/
+temp/
+
+# Docs
+docs/
 
 # Environment
 .env

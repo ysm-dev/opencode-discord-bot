@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/**/*.test.ts", "test/**/*.ts"],
+  "project": ["scripts/**/*.ts", "src/**/*.ts", "test/**/*.ts"],
+  "ignoreDependencies": ["@effect/vitest", "@vitest/coverage-v8"]
+}
