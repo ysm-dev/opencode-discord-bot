@@ -23,6 +23,15 @@ type LiveDiscordOptions = {
   readonly publicKey?: string
 }
 
+type NicknameCacheEntry = {
+  readonly nickname: string | undefined
+  readonly expiresAt: number
+}
+
+const defaultNicknameCacheTtlMs = 7 * 24 * 60 * 60 * 1000
+const nicknameLookupFailureCacheTtlMs = 5 * 60 * 1000
+const nicknameResolveConcurrency = 5
+
 const threadIdFromScope = (adapter: ChatDiscordAdapter, scope: DiscordScope): string =>
   adapter.encodeThreadId({
     guildId: scope.guildId,
@@ -44,7 +53,7 @@ const attachments = (message: Message<unknown>): ReadonlyArray<DiscordAttachment
     url: item.url ?? ""
   }))
 
-const fromChatMessage = (scope: DiscordScope, message: Message<unknown>): DiscordMessage => ({
+const fromChatMessage = (scope: DiscordScope, message: Message<unknown>, nickname?: string | undefined): DiscordMessage => ({
   id: message.id,
   guildId: scope.guildId,
   channelId: scope.channelId,
@@ -52,7 +61,7 @@ const fromChatMessage = (scope: DiscordScope, message: Message<unknown>): Discor
   author: {
     id: message.author.userId,
     displayName: message.author.fullName,
-    nickname: message.author.userName,
+    ...(nickname === undefined ? {} : { nickname }),
     isBot: message.author.isBot === true
   },
   content: message.text,
@@ -102,75 +111,137 @@ const retryAfterHeader = (response: Response) => {
 type RawDiscordOptions = {
   readonly botToken: string
   readonly apiUrl?: string | undefined
+  readonly nicknameCacheTtlMs?: number | undefined
+}
+
+const rawDiscordRequest = async (options: RawDiscordOptions | undefined, path: string, init: RequestInit): Promise<unknown> => {
+  if (options === undefined) throw new Error("Discord adapter does not expose this operation")
+  const response = await fetch(`${options.apiUrl ?? "https://discord.com/api/v10"}${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bot ${options.botToken}`,
+      "content-type": "application/json",
+      ...init.headers
+    }
+  })
+  if (!response.ok)
+    throw new DiscordError({
+      message: `Discord REST ${response.status}: ${await response.text()}`,
+      retryAfter: retryAfterHeader(response)
+    })
+  if (response.status === 204) return {}
+  return await response.json()
 }
 
 const rawDiscord = (options: RawDiscordOptions | undefined, path: string, init: RequestInit): Effect.Effect<unknown, DiscordError> =>
-  tryAdapter(async () => {
-    if (options === undefined) throw new Error("Discord adapter does not expose this operation")
-    const response = await fetch(`${options.apiUrl ?? "https://discord.com/api/v10"}${path}`, {
-      ...init,
-      headers: {
-        authorization: `Bot ${options.botToken}`,
-        "content-type": "application/json",
-        ...init.headers
-      }
-    })
-    if (!response.ok)
-      throw new DiscordError({
-        message: `Discord REST ${response.status}: ${await response.text()}`,
-        retryAfter: retryAfterHeader(response)
-      })
-    if (response.status === 204) return {}
-    return await response.json()
-  })
+  tryAdapter(() => rawDiscordRequest(options, path, init))
+
+const memberNickname = (data: unknown): string | undefined => {
+  if (!isRecord(data)) return undefined
+  const nick = data.nick
+  return typeof nick === "string" && nick.length > 0 ? nick : undefined
+}
 
 const normalizeMentionsForChatAdapter = (content: string): string => content.replace(/<@!?(\w+)>/g, "@$1")
 
-export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordOptions | undefined = undefined): DiscordService => ({
-  fetchContext: (scope, limit) =>
+export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordOptions | undefined = undefined): DiscordService => {
+  const nicknameCache = new Map<string, NicknameCacheEntry>()
+  const nicknameInflight = new Map<string, Promise<string | undefined>>()
+  const nicknameCacheTtlMs =
+    raw?.nicknameCacheTtlMs !== undefined && Number.isFinite(raw.nicknameCacheTtlMs) && raw.nicknameCacheTtlMs > 0
+      ? raw.nicknameCacheTtlMs
+      : defaultNicknameCacheTtlMs
+
+  const cacheNickname = (key: string, nickname: string | undefined, ttlMs = nicknameCacheTtlMs): void => {
+    nicknameCache.set(key, { nickname, expiresAt: Date.now() + ttlMs })
+  }
+
+  const resolveNickname = async (scope: DiscordScope, userId: string): Promise<string | undefined> => {
+    if (raw === undefined || scope.guildId === "@me") return undefined
+    const key = `${scope.guildId}:${userId}`
+    const cached = nicknameCache.get(key)
+    if (cached !== undefined && cached.expiresAt > Date.now()) return cached.nickname
+
+    const inflight = nicknameInflight.get(key)
+    if (inflight !== undefined) return inflight
+
+    const request = rawDiscordRequest(raw, `/guilds/${scope.guildId}/members/${userId}`, { method: "GET" })
+      .then(memberNickname)
+      .then((nickname) => {
+        cacheNickname(key, nickname)
+        return nickname
+      })
+      .catch(() => {
+        cacheNickname(key, undefined, nicknameLookupFailureCacheTtlMs)
+        return undefined
+      })
+      .finally(() => nicknameInflight.delete(key))
+    nicknameInflight.set(key, request)
+    return request
+  }
+
+  const resolveNicknames = async (
+    scope: DiscordScope,
+    messages: ReadonlyArray<Message<unknown>>
+  ): Promise<ReadonlyMap<string, string | undefined>> => {
+    if (raw === undefined || scope.guildId === "@me") return new Map()
+    const pending = [...new Set(messages.map((message) => message.author.userId))]
+    const resolved = new Map<string, string | undefined>()
+    const workers = Array.from({ length: Math.min(nicknameResolveConcurrency, pending.length) }, async () => {
+      while (true) {
+        const userId = pending.shift()
+        if (userId === undefined) return
+        resolved.set(userId, await resolveNickname(scope, userId))
+      }
+    })
+    await Promise.all(workers)
+    return resolved
+  }
+
+  const fetchMessages = (scope: DiscordScope, limit: number) =>
     tryAdapter(async () => {
       const threadId = threadIdFromScope(adapter, scope)
       const result = await adapter.fetchMessages(threadId, { limit })
-      return result.messages.map((message) => fromChatMessage(scope, message))
-    }),
-  fetchHistory: (scope, limit) =>
-    tryAdapter(async () => {
-      const threadId = threadIdFromScope(adapter, scope)
-      const result = await adapter.fetchMessages(threadId, { limit })
-      return result.messages.map((message) => fromChatMessage(scope, message))
-    }),
-  sendTyping: (scope) => tryAdapter(() => adapter.startTyping(threadIdFromScope(adapter, scope))).pipe(Effect.asVoid),
-  postMessage: (scope, content) =>
-    tryAdapter(async () => {
-      const result = await adapter.postMessage(threadIdFromScope(adapter, scope), normalizeMentionsForChatAdapter(content))
-      return { id: result.id }
-    }),
-  editMessage: (scope, messageId, content) =>
-    tryAdapter(() => adapter.editMessage(threadIdFromScope(adapter, scope), messageId, normalizeMentionsForChatAdapter(content))).pipe(
-      Effect.asVoid
-    ),
-  deleteMessage: (scope, messageId) =>
-    tryAdapter(() => adapter.deleteMessage(threadIdFromScope(adapter, scope), messageId)).pipe(Effect.asVoid),
-  addReaction: (scope, messageId, emoji) =>
-    tryAdapter(() => adapter.addReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
-  removeReaction: (scope, messageId, emoji) =>
-    tryAdapter(() => adapter.removeReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
-  attachFile: (scope, path) =>
-    tryAdapter(async () => {
-      const file: PostableRaw = { raw: "", files: [{ filename: basename(path), data: await readFile(path) }] }
-      const result = await adapter.postMessage(threadIdFromScope(adapter, scope), file)
-      return { path: result.id }
-    }),
-  createThread: (scope, name) =>
-    rawDiscord(raw, `/channels/${scope.channelId}/threads`, {
-      method: "POST",
-      body: JSON.stringify({ name, type: 11 })
-    }).pipe(Effect.map((data) => ({ id: isRecord(data) && typeof data.id === "string" ? data.id : "" }))),
-  pinMessage: (scope, messageId) =>
-    rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "PUT" }).pipe(Effect.asVoid),
-  unpinMessage: (scope, messageId) =>
-    rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "DELETE" }).pipe(Effect.asVoid)
-})
+      const nicknames = await resolveNicknames(scope, result.messages)
+      return result.messages.map((message) => fromChatMessage(scope, message, nicknames.get(message.author.userId)))
+    })
+
+  return {
+    fetchContext: fetchMessages,
+    fetchHistory: fetchMessages,
+    sendTyping: (scope) => tryAdapter(() => adapter.startTyping(threadIdFromScope(adapter, scope))).pipe(Effect.asVoid),
+    postMessage: (scope, content) =>
+      tryAdapter(async () => {
+        const result = await adapter.postMessage(threadIdFromScope(adapter, scope), normalizeMentionsForChatAdapter(content))
+        return { id: result.id }
+      }),
+    editMessage: (scope, messageId, content) =>
+      tryAdapter(() => adapter.editMessage(threadIdFromScope(adapter, scope), messageId, normalizeMentionsForChatAdapter(content))).pipe(
+        Effect.asVoid
+      ),
+    deleteMessage: (scope, messageId) =>
+      tryAdapter(() => adapter.deleteMessage(threadIdFromScope(adapter, scope), messageId)).pipe(Effect.asVoid),
+    addReaction: (scope, messageId, emoji) =>
+      tryAdapter(() => adapter.addReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
+    removeReaction: (scope, messageId, emoji) =>
+      tryAdapter(() => adapter.removeReaction(threadIdFromScope(adapter, scope), messageId, emoji)).pipe(Effect.asVoid),
+    attachFile: (scope, path) =>
+      tryAdapter(async () => {
+        const file: PostableRaw = { raw: "", files: [{ filename: basename(path), data: await readFile(path) }] }
+        const result = await adapter.postMessage(threadIdFromScope(adapter, scope), file)
+        return { path: result.id }
+      }),
+    createThread: (scope, name) =>
+      rawDiscord(raw, `/channels/${scope.channelId}/threads`, {
+        method: "POST",
+        body: JSON.stringify({ name, type: 11 })
+      }).pipe(Effect.map((data) => ({ id: isRecord(data) && typeof data.id === "string" ? data.id : "" }))),
+    pinMessage: (scope, messageId) =>
+      rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "PUT" }).pipe(Effect.asVoid),
+    unpinMessage: (scope, messageId) =>
+      rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "DELETE" }).pipe(Effect.asVoid)
+  }
+}
 
 export const makeLiveChatSdkDiscord = (options: LiveDiscordOptions): DiscordService =>
   makeChatSdkDiscord(

@@ -99,7 +99,7 @@ describe("makeChatSdkDiscord", () => {
         guildId: "g1",
         channelId: "c1",
         threadId: "t1",
-        author: { id: "u1", displayName: "Alice", nickname: "alice", isBot: false },
+        author: { id: "u1", displayName: "Alice", isBot: false },
         content: "hello <@999>",
         timestamp: "2026-06-05T14:03:00.000Z",
         mentions: ["999"],
@@ -149,6 +149,56 @@ describe("makeChatSdkDiscord", () => {
 })
 
 describe("makeChatSdkDiscord REST operations", () => {
+  test("resolves server nicknames for fetched message authors and caches them", async () => {
+    const adapter = new FakeDiscordAdapter()
+    const requests: Array<string> = []
+    const originalFetch = globalThis.fetch
+    const fakeFetch: typeof fetch = Object.assign(
+      (input: URL | RequestInfo) => {
+        const url = String(input)
+        requests.push(url)
+        return Promise.resolve(
+          new Response(JSON.stringify({ nick: "Ali the Great" }), { status: 200, headers: { "content-type": "application/json" } })
+        )
+      },
+      { preconnect: originalFetch.preconnect }
+    )
+    globalThis.fetch = fakeFetch
+
+    try {
+      const discord = makeChatSdkDiscord(adapter, { botToken: "token", apiUrl: "https://discord.test/api" })
+
+      const context = await Effect.runPromise(discord.fetchContext(scope, 30))
+      const history = await Effect.runPromise(discord.fetchHistory(scope, 30))
+
+      expect(context[0]?.author).toEqual({ id: "u1", displayName: "Alice", nickname: "Ali the Great", isBot: false })
+      expect(history[0]?.author).toEqual({ id: "u1", displayName: "Alice", nickname: "Ali the Great", isBot: false })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+
+    expect(requests).toEqual(["https://discord.test/api/guilds/g1/members/u1"])
+  })
+
+  test("omits server nickname when the member lookup fails", async () => {
+    const adapter = new FakeDiscordAdapter()
+    const originalFetch = globalThis.fetch
+    const fakeFetch: typeof fetch = Object.assign(() => Promise.resolve(new Response("missing", { status: 404 })), {
+      preconnect: originalFetch.preconnect
+    })
+    globalThis.fetch = fakeFetch
+
+    try {
+      const discord = makeChatSdkDiscord(adapter, { botToken: "token", apiUrl: "https://discord.test/api" })
+
+      const context = await Effect.runPromise(discord.fetchContext(scope, 30))
+
+      expect(context[0]?.author).toEqual({ id: "u1", displayName: "Alice", isBot: false })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
   test("routes deletes and raw REST adapter gaps", async () => {
     const adapter = new FakeDiscordAdapter()
     const requests: Array<readonly [string, RequestInit]> = []
