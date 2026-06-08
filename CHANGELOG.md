@@ -1,5 +1,11 @@
 # opencode-discord-bot
 
+## 0.1.0
+
+### Minor Changes
+
+- Include Discord message reaction counts in the model context.
+
 ## 0.0.11
 
 ### Patch Changes

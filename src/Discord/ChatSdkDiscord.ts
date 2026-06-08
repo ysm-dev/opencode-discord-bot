@@ -3,7 +3,7 @@ import { basename } from "node:path"
 import { createDiscordAdapter, type DiscordThreadId } from "@chat-adapter/discord"
 import type { AdapterPostableMessage, FetchOptions, FetchResult, Message, PostableRaw, RawMessage } from "chat"
 import { Duration, Effect } from "effect"
-import type { DiscordAttachment, DiscordMessage, DiscordScope } from "../Schema.ts"
+import type { DiscordAttachment, DiscordMessage, DiscordReaction, DiscordScope } from "../Schema.ts"
 import { DiscordError, type DiscordService } from "./DiscordPort.ts"
 
 type ChatDiscordAdapter = {
@@ -52,6 +52,23 @@ const attachments = (message: Message<unknown>): ReadonlyArray<DiscordAttachment
     url: item.url ?? ""
   }))
 
+const reactionEmoji = (value: unknown): string => {
+  if (!isRecord(value)) return "unknown"
+  const name = typeof value.name === "string" && value.name.length > 0 ? value.name : undefined
+  const id = typeof value.id === "string" && value.id.length > 0 ? value.id : undefined
+  if (id !== undefined && name !== undefined) return `${value.animated === true ? "a:" : ""}${name}:${id}`
+  return name ?? id ?? "unknown"
+}
+
+const reactions = (message: Message<unknown>): ReadonlyArray<DiscordReaction> => {
+  if (!isRecord(message.raw)) return []
+  const rawReactions: ReadonlyArray<unknown> = Array.isArray(message.raw.reactions) ? message.raw.reactions : []
+  return rawReactions.flatMap((item) => {
+    if (!isRecord(item) || typeof item.count !== "number" || !Number.isFinite(item.count) || item.count < 0) return []
+    return [{ emoji: reactionEmoji(item.emoji), count: item.count }]
+  })
+}
+
 const fromChatMessage = (scope: DiscordScope, message: Message<unknown>, nickname?: string | undefined): DiscordMessage => ({
   id: message.id,
   guildId: scope.guildId,
@@ -70,7 +87,7 @@ const fromChatMessage = (scope: DiscordScope, message: Message<unknown>, nicknam
   everyoneMention: message.text.includes("@everyone"),
   hereMention: message.text.includes("@here"),
   attachments: attachments(message),
-  reactions: [],
+  reactions: reactions(message),
   channelType: "guild"
 })
 
