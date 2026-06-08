@@ -31,7 +31,7 @@ describe("context assembly", () => {
       })
     )
 
-    expect(rendered).toContain("[Nick 1 | <@u-1> | 2026-06-05 14:03 UTC | messageId=1]")
+    expect(rendered).toContain("[Nick 1 | 2026-06-05 14:03 UTC | messageId=1]")
     expect(rendered).toContain("Can you refactor this?")
     expect(rendered).toContain("(discord target: guildId=g1 channelId=c1)")
     expect(rendered).toContain("(attachments: screenshot.png [image/png; 12 bytes; https://cdn/a1])")
@@ -51,13 +51,17 @@ describe("context assembly", () => {
 
     expect(prompt.messages.map((item) => item.id)).toEqual(["1", "2", "3"])
     expect(prompt.text.match(/latest <@999>/g)).toHaveLength(1)
+    expect(prompt.text).toContain("(participants)\nNick 1 - <@u-1>\nNick 2 - <@u-2>\nNick 3 - <@u-3>")
+    expect(prompt.text.match(/<@u-3>/g)).toHaveLength(1)
     expect(prompt.text).toContain("Plain assistant text is streamed to Discord automatically")
     expect(prompt.text).toContain("do not use bridge tools to send messages")
     expect(prompt.text).toContain("<@id> pings that user in Discord")
+    expect(prompt.text).toContain("use the participants list to map server nicknames/display names")
+    expect(prompt.text).toContain("When a display name is shared")
     expect(prompt.text).toContain("combine the discord default scope or message target override with the header messageId")
     expect(prompt.text).toContain("Do not emit @everyone, @here, or role pings")
     expect(prompt.text).toContain("(discord default scope: guildId=g1 channelId=c1)")
-    expect(prompt.text).toContain("[Nick 3 | <@u-3> | 2026-06-05 14:03 UTC | messageId=3]")
+    expect(prompt.text).toContain("[Nick 3 | 2026-06-05 14:03 UTC | messageId=3]")
     expect(prompt.text).not.toContain("(discord target: guildId=g1 channelId=c1 messageId=3)")
   })
 
@@ -73,9 +77,30 @@ describe("context assembly", () => {
     })
 
     expect(prompt.text).toContain("(discord default scope: guildId=g1 channelId=c1)")
-    expect(prompt.text).toContain("[Nick 1 | <@u-1> | 2026-06-05 14:03 UTC | messageId=1]")
+    expect(prompt.text).toContain("[Nick 1 | 2026-06-05 14:03 UTC | messageId=1]")
     expect(prompt.text).toContain("(discord target: guildId=g1 channelId=c2 threadId=t2)")
     expect(prompt.text).not.toContain("(discord target: guildId=g1 channelId=c1)")
+  })
+
+  test("keeps author ids in headers when participant labels collide", () => {
+    const first = makeMessage("1", "from first Sam", {
+      author: { id: "sam-1", displayName: "Sam", nickname: "Sam", isBot: false }
+    })
+    const second = makeMessage("2", "from second Sam", {
+      author: { id: "sam-2", displayName: "Sam", nickname: "Sam", isBot: false }
+    })
+    const prompt = assembleContextPrompt({
+      botUserId: "999",
+      contextMessages: [first],
+      triggerMessage: second,
+      maxMessages: 30,
+      maxChars: 10_000,
+      maxAttachmentBytes: 10_000
+    })
+
+    expect(prompt.text).toContain("(participants)\nSam - <@sam-1>\nSam - <@sam-2>")
+    expect(prompt.text).toContain("[Sam | <@sam-1> | 2026-06-05 14:03 UTC | messageId=1]")
+    expect(prompt.text).toContain("[Sam | <@sam-2> | 2026-06-05 14:03 UTC | messageId=2]")
   })
 
   test("applies top-N and character budgets without dropping the trigger", () => {

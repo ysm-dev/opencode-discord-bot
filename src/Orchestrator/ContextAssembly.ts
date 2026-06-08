@@ -18,7 +18,7 @@ type ContextInput = {
 }
 
 const preamble = (botUserId: string) =>
-  `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord. For non-message bridge tools, combine the discord default scope or message target override with the header messageId. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
+  `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord; use the participants list to map server nicknames/display names to their <@id> values. When a display name is shared, the message header also includes that author's <@id>. For non-message bridge tools, combine the discord default scope or message target override with the header messageId. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
 
 const timestamp = (value: string): string => {
   const date = new Date(value)
@@ -72,10 +72,53 @@ const attachmentParts = (messages: ReadonlyArray<DiscordMessage>, maxBytes: numb
     })
   )
 
-export const formatDiscordMessage = (message: DiscordMessage, defaultScope?: DiscordScope): string => {
-  const label = message.author.nickname ?? message.author.displayName
+const authorLabel = (message: DiscordMessage): string => message.author.nickname ?? message.author.displayName
+
+type ParticipantsSummary = {
+  readonly text: string | undefined
+  readonly ambiguousAuthorIds: ReadonlySet<string>
+}
+
+const participantsSummary = (messages: ReadonlyArray<DiscordMessage>): ParticipantsSummary => {
+  const participants: Array<{ readonly id: string; readonly label: string }> = []
+  const seenAuthorIds = new Set<string>()
+  const authorIdsByLabel = new Map<string, Set<string>>()
+
+  for (const message of messages) {
+    const id = message.author.id
+    if (seenAuthorIds.has(id)) continue
+    seenAuthorIds.add(id)
+
+    const label = authorLabel(message)
+    participants.push({ id, label })
+
+    const authorIds = authorIdsByLabel.get(label)
+    if (authorIds === undefined) authorIdsByLabel.set(label, new Set([id]))
+    else authorIds.add(id)
+  }
+
+  const ambiguousAuthorIds = new Set<string>()
+  for (const authorIds of authorIdsByLabel.values()) {
+    if (authorIds.size <= 1) continue
+    for (const id of authorIds) ambiguousAuthorIds.add(id)
+  }
+
+  return {
+    ambiguousAuthorIds,
+    text:
+      participants.length === 0 ? undefined : `(participants)\n${participants.map((item) => `${item.label} - <@${item.id}>`).join("\n")}`
+  }
+}
+
+export const formatDiscordMessage = (
+  message: DiscordMessage,
+  defaultScope?: DiscordScope,
+  ambiguousAuthorIds?: ReadonlySet<string>
+): string => {
+  const label = authorLabel(message)
+  const author = ambiguousAuthorIds?.has(message.author.id) === true ? `${label} | <@${message.author.id}>` : label
   const scope = scopeOf(message)
-  const lines = [`[${label} | <@${message.author.id}> | ${timestamp(message.timestamp)} | messageId=${message.id}]`, message.content]
+  const lines = [`[${author} | ${timestamp(message.timestamp)} | messageId=${message.id}]`, message.content]
   if (defaultScope === undefined || !sameScope(scope, defaultScope)) lines.push(targetSummary(scope))
   const attachments = attachmentSummary(message)
   const reactions = reactionSummary(message)
@@ -115,11 +158,14 @@ const renderPrompt = (
   const skippedIds = new Set(skippedMessages.map((message) => message.id))
   const latestMessage = messages.at(-1)
   const defaultScope = latestMessage === undefined ? undefined : scopeOf(latestMessage)
+  const participants = participantsSummary(messages)
   return [
     preamble(botUserId),
+    ...(participants.text === undefined ? [] : [participants.text]),
     ...(defaultScope === undefined ? [] : [defaultScopeSummary(defaultScope)]),
     ...messages.map(
-      (message) => `${skippedIds.has(message.id) ? "(queued intermediate message)\n" : ""}${formatDiscordMessage(message, defaultScope)}`
+      (message) =>
+        `${skippedIds.has(message.id) ? "(queued intermediate message)\n" : ""}${formatDiscordMessage(message, defaultScope, participants.ambiguousAuthorIds)}`
     )
   ].join("\n\n")
 }
