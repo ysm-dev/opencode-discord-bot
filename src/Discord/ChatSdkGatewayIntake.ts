@@ -175,7 +175,7 @@ const unsupported = (operation: string): Promise<never> => Promise.reject(new Er
 
 export const makeGatewayAdapter = (bot: BotIdentity): Adapter<DiscordScope, DiscordMessage> => ({
   name: "discord",
-  userName: `<@${bot.userId}>`,
+  userName: bot.userId,
   botUserId: bot.userId,
   lockScope: "thread",
   initialize: () => Promise.resolve(),
@@ -208,7 +208,7 @@ export const makeChatGatewayIntake = (options: ChatGatewayIntakeOptions): ChatGa
   const chat = new Chat({
     adapters: { discord: adapter },
     state: makeTransientChatState(),
-    userName: `<@${options.bot.userId}>`,
+    userName: options.bot.userId,
     concurrency: "concurrent",
     dedupeTtlMs: 5 * 60 * 1000
   })

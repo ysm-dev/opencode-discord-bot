@@ -142,6 +142,8 @@ const rawDiscord = (options: RawDiscordOptions | undefined, path: string, init: 
     return await response.json()
   })
 
+const normalizeMentionsForChatAdapter = (content: string): string => content.replace(/<@!?(\w+)>/g, "@$1")
+
 export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordOptions | undefined = undefined): DiscordService => ({
   fetchContext: (scope, limit) =>
     tryAdapter(async () => {
@@ -158,11 +160,13 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
   sendTyping: (scope) => tryAdapter(() => adapter.startTyping(threadIdFromScope(adapter, scope))).pipe(Effect.asVoid),
   postMessage: (scope, content) =>
     tryAdapter(async () => {
-      const result = await adapter.postMessage(threadIdFromScope(adapter, scope), content)
+      const result = await adapter.postMessage(threadIdFromScope(adapter, scope), normalizeMentionsForChatAdapter(content))
       return { id: result.id }
     }),
   editMessage: (scope, messageId, content) =>
-    tryAdapter(() => adapter.editMessage(threadIdFromScope(adapter, scope), messageId, content)).pipe(Effect.asVoid),
+    tryAdapter(() => adapter.editMessage(threadIdFromScope(adapter, scope), messageId, normalizeMentionsForChatAdapter(content))).pipe(
+      Effect.asVoid
+    ),
   deleteMessage: (scope, messageId) =>
     tryAdapter(() => adapter.deleteMessage(threadIdFromScope(adapter, scope), messageId)).pipe(Effect.asVoid),
   addReaction: (scope, messageId, emoji) =>
@@ -184,7 +188,10 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
     tryAdapter(async () => {
       const encodedChannelId = adapter.encodeThreadId({ guildId, channelId })
       await validateGuildChannel(adapter, guildId, encodedChannelId)
-      const result = await adapter.postChannelMessage(encodedChannelId, sanitizeGuildContent(guildId, content))
+      const result = await adapter.postChannelMessage(
+        encodedChannelId,
+        normalizeMentionsForChatAdapter(sanitizeGuildContent(guildId, content))
+      )
       return { id: result.id }
     }),
   pinMessage: (scope, messageId) =>

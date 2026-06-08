@@ -42,6 +42,7 @@ test("maps Discord messages through the chat-sdk adapter facade", async () => {
   const parsed = adapter.parseMessage(withAttachment)
 
   expect(adapter.encodeThreadId({ guildId: "g1", channelId: "c1", threadId: "t1" })).toBe("discord:g1:c1:t1")
+  expect(adapter.userName).toBe("self")
   expect(adapter.decodeThreadId("discord:g1:c1:t1")).toEqual({ guildId: "g1", channelId: "c1", threadId: "t1" })
   expect(adapter.channelIdFromThreadId("discord:g1:c1:t1")).toBe("c1")
   expect(parsed.threadId).toBe("discord:g1:c1")

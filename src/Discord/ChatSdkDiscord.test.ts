@@ -142,6 +142,27 @@ describe("makeChatSdkDiscord", () => {
     ])
   })
 
+  test("normalizes Discord user mention wrappers before chat-sdk output conversion", async () => {
+    const adapter = new FakeDiscordAdapter()
+    const discord = makeChatSdkDiscord(adapter)
+
+    const posted = await Effect.runPromise(discord.postMessage(scope, "hello <@999> and <@!888>"))
+    await Effect.runPromise(discord.editMessage(scope, posted.id, "edited <@777>"))
+    await Effect.runPromise(discord.postChannelMessage("g1", "c2", "channel <@666>"))
+
+    expect(adapter.calls).toEqual([
+      ["encodeThreadId", { guildId: "g1", channelId: "c1", threadId: "t1" }],
+      ["postMessage", { threadId: "discord:g1:c1:t1", message: "hello @999 and @888" }],
+      ["encodeThreadId", { guildId: "g1", channelId: "c1", threadId: "t1" }],
+      ["editMessage", { threadId: "discord:g1:c1:t1", messageId: "posted-1", message: "edited @777" }],
+      ["encodeThreadId", { guildId: "g1", channelId: "c2" }],
+      ["fetchChannelInfo", { channelId: "discord:g1:c2" }],
+      ["postChannelMessage", { channelId: "discord:g1:c2", message: "channel @666" }]
+    ])
+  })
+})
+
+describe("makeChatSdkDiscord REST operations", () => {
   test("routes channel posts, deletes, and raw REST adapter gaps", async () => {
     const adapter = new FakeDiscordAdapter()
     const requests: Array<readonly [string, RequestInit]> = []
