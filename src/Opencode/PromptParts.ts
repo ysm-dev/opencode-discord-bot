@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer"
 import { Data, Effect } from "effect"
 import type { OpencodePromptFilePart } from "./OpencodePort.ts"
 
-export class PromptPartError extends Data.TaggedError("PromptPartError")<{
+class PromptPartError extends Data.TaggedError("PromptPartError")<{
   readonly message: string
 }> {}
 
