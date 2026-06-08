@@ -17,10 +17,8 @@ export type ToolConfig = {
   readonly reactions: boolean
   readonly attachFiles: boolean
   readonly fetchHistory: boolean
-  readonly followUpMessages: boolean
   readonly createThread: boolean
   readonly editDeleteOwn: boolean
-  readonly postOtherChannels: boolean
   readonly pin: boolean
 }
 
@@ -96,10 +94,8 @@ export const defaultConfig: RuntimeConfig = {
     reactions: true,
     attachFiles: true,
     fetchHistory: true,
-    followUpMessages: true,
     createThread: false,
     editDeleteOwn: false,
-    postOtherChannels: false,
     pin: false
   },
   streaming: {
@@ -263,10 +259,8 @@ export const loadConfigFromSources = Effect.fn("loadConfigFromSources")(function
       reactions: readBoolean(tools, "reactions", defaultConfig.tools.reactions),
       attachFiles: readBoolean(tools, "attachFiles", defaultConfig.tools.attachFiles),
       fetchHistory: readBoolean(tools, "fetchHistory", defaultConfig.tools.fetchHistory),
-      followUpMessages: readBoolean(tools, "followUpMessages", defaultConfig.tools.followUpMessages),
       createThread: readBoolean(tools, "createThread", defaultConfig.tools.createThread),
       editDeleteOwn: readBoolean(tools, "editDeleteOwn", defaultConfig.tools.editDeleteOwn),
-      postOtherChannels: readBoolean(tools, "postOtherChannels", defaultConfig.tools.postOtherChannels),
       pin: readBoolean(tools, "pin", defaultConfig.tools.pin)
     },
     streaming: {

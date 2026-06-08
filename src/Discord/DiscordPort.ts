@@ -22,7 +22,6 @@ export type DiscordService = {
   readonly attachFile: (scope: DiscordScope, path: string) => Effect.Effect<{ readonly path: string }, DiscordError>
   readonly createThread: (scope: DiscordScope, name: string) => Effect.Effect<{ readonly id: string }, DiscordError>
   readonly deleteMessage: (scope: DiscordScope, messageId: string) => Effect.Effect<void, DiscordError>
-  readonly postChannelMessage: (guildId: string, channelId: string, content: string) => Effect.Effect<{ readonly id: string }, DiscordError>
   readonly pinMessage: (scope: DiscordScope, messageId: string) => Effect.Effect<void, DiscordError>
   readonly unpinMessage: (scope: DiscordScope, messageId: string) => Effect.Effect<void, DiscordError>
 }

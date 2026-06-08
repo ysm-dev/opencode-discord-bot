@@ -3,11 +3,10 @@ import { tool } from "@opencode-ai/plugin"
 const loopbackToolUrl = "__OPENCODE_DISCORD_BOT_LOOPBACK_URL__/tool"
 
 export default tool({
-  description: "Perform safe Discord bridge actions through the local opencode-discord-bot process.",
+  description: "Perform non-message Discord bridge actions through the local opencode-discord-bot process.",
   args: {
     action: tool.schema
       .enum([
-        "followUpMessage",
         "addReaction",
         "removeReaction",
         "fetchHistory",
@@ -15,7 +14,6 @@ export default tool({
         "createThread",
         "editOwnMessage",
         "deleteOwnMessage",
-        "postOtherChannel",
         "pin",
         "unpin"
       ])
@@ -30,7 +28,7 @@ export default tool({
       .describe("Discord target for the action."),
     args: tool.schema
       .record(tool.schema.string(), tool.schema.unknown())
-      .describe("Action-specific arguments, such as content, emoji, limit, path, or name.")
+      .describe("Action-specific arguments, such as emoji, limit, path, name, or replacement content for editOwnMessage.")
   },
   async execute(request) {
     const response = await fetch(loopbackToolUrl, {

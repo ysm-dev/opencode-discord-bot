@@ -51,8 +51,10 @@ describe("context assembly", () => {
 
     expect(prompt.messages.map((item) => item.id)).toEqual(["1", "2", "3"])
     expect(prompt.text.match(/latest <@999>/g)).toHaveLength(1)
+    expect(prompt.text).toContain("Plain assistant text is streamed to Discord automatically")
+    expect(prompt.text).toContain("do not use bridge tools to send messages")
     expect(prompt.text).toContain("<@id> pings that user in Discord")
-    expect(prompt.text).toContain("Use discord target metadata when calling bridge tools")
+    expect(prompt.text).toContain("Use discord target metadata when calling non-message bridge tools")
     expect(prompt.text).toContain("Do not emit @everyone, @here, or role pings")
   })
 

@@ -124,7 +124,6 @@ describe("makeApplication startup", () => {
       attachFile: () => Effect.succeed({ path: "out.txt" }),
       createThread: () => Effect.succeed({ id: "thread" }),
       deleteMessage: () => Effect.void,
-      postChannelMessage: () => Effect.succeed({ id: "posted" }),
       pinMessage: () => Effect.void,
       unpinMessage: () => Effect.void
     }
@@ -203,16 +202,17 @@ describe("makeApplication facade", () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     const response = await Effect.runPromise(
       app.handleTool({
-        action: "followUpMessage",
-        target: { guildId: "g1", channelId: "c1" },
-        args: { content: "hello @everyone <@&123>" }
+        action: "addReaction",
+        target: { guildId: "g1", channelId: "c1", messageId: "m1" },
+        args: { emoji: "rocket" }
       })
     )
     releaseTurn?.()
     await running
 
-    expect(response).toEqual({ ok: true, result: { id: "posted-1" } })
-    expect(discord.messages.map((item) => item.content)).toEqual(["hello @ everyone <@& 123>"])
+    expect(response).toEqual({ ok: true, result: { reacted: true } })
+    expect(discord.reactions).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, messageId: "m1", emoji: "rocket", op: "add" }])
+    expect(discord.messages).toEqual([])
   })
 
   test("runs message turns and stop commands through the application facade", async () => {

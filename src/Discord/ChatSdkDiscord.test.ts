@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { DiscordThreadId } from "@chat-adapter/discord"
-import type { AdapterPostableMessage, ChannelInfo, FetchResult, RawMessage } from "chat"
+import type { AdapterPostableMessage, FetchResult, RawMessage } from "chat"
 import { Message, parseMarkdown } from "chat"
 import { Duration, Effect } from "effect"
 import type { DiscordScope } from "../Schema.ts"
@@ -35,16 +35,6 @@ class FakeDiscordAdapter {
   deleteMessage(threadId: string, messageId: string): Promise<void> {
     this.calls.push(["deleteMessage", { threadId, messageId }])
     return Promise.resolve()
-  }
-
-  postChannelMessage(channelId: string, message: AdapterPostableMessage): Promise<RawMessage<unknown>> {
-    this.calls.push(["postChannelMessage", { channelId, message }])
-    return Promise.resolve({ id: "posted-channel-1", threadId: channelId, raw: {} })
-  }
-
-  fetchChannelInfo(channelId: string): Promise<ChannelInfo> {
-    this.calls.push(["fetchChannelInfo", { channelId }])
-    return Promise.resolve({ id: channelId, isDM: false, metadata: { raw: { guild_id: "g1" } } })
   }
 
   startTyping(threadId: string): Promise<void> {
@@ -148,22 +138,18 @@ describe("makeChatSdkDiscord", () => {
 
     const posted = await Effect.runPromise(discord.postMessage(scope, "hello <@999> and <@!888>"))
     await Effect.runPromise(discord.editMessage(scope, posted.id, "edited <@777>"))
-    await Effect.runPromise(discord.postChannelMessage("g1", "c2", "channel <@666>"))
 
     expect(adapter.calls).toEqual([
       ["encodeThreadId", { guildId: "g1", channelId: "c1", threadId: "t1" }],
       ["postMessage", { threadId: "discord:g1:c1:t1", message: "hello @999 and @888" }],
       ["encodeThreadId", { guildId: "g1", channelId: "c1", threadId: "t1" }],
-      ["editMessage", { threadId: "discord:g1:c1:t1", messageId: "posted-1", message: "edited @777" }],
-      ["encodeThreadId", { guildId: "g1", channelId: "c2" }],
-      ["fetchChannelInfo", { channelId: "discord:g1:c2" }],
-      ["postChannelMessage", { channelId: "discord:g1:c2", message: "channel @666" }]
+      ["editMessage", { threadId: "discord:g1:c1:t1", messageId: "posted-1", message: "edited @777" }]
     ])
   })
 })
 
 describe("makeChatSdkDiscord REST operations", () => {
-  test("routes channel posts, deletes, and raw REST adapter gaps", async () => {
+  test("routes deletes and raw REST adapter gaps", async () => {
     const adapter = new FakeDiscordAdapter()
     const requests: Array<readonly [string, RequestInit]> = []
     const originalFetch = globalThis.fetch
@@ -185,7 +171,6 @@ describe("makeChatSdkDiscord REST operations", () => {
       const discord = makeChatSdkDiscord(adapter, { botToken: "token", apiUrl: "https://discord.test/api" })
 
       await Effect.runPromise(discord.deleteMessage(scope, "m1"))
-      expect(await Effect.runPromise(discord.postChannelMessage("g1", "c2", "hello"))).toEqual({ id: "posted-channel-1" })
       expect(await Effect.runPromise(discord.createThread(scope, "work"))).toEqual({ id: "thread-1" })
       await Effect.runPromise(discord.pinMessage(scope, "m1"))
       await Effect.runPromise(discord.unpinMessage(scope, "m1"))
@@ -193,13 +178,7 @@ describe("makeChatSdkDiscord REST operations", () => {
       globalThis.fetch = originalFetch
     }
 
-    expect(adapter.calls.map((item) => item[0])).toEqual([
-      "encodeThreadId",
-      "deleteMessage",
-      "encodeThreadId",
-      "fetchChannelInfo",
-      "postChannelMessage"
-    ])
+    expect(adapter.calls.map((item) => item[0])).toEqual(["encodeThreadId", "deleteMessage"])
     expect(requests.map((request) => [request[0], request[1].method])).toEqual([
       ["https://discord.test/api/channels/c1/threads", "POST"],
       ["https://discord.test/api/channels/t1/pins/m1", "PUT"],
@@ -232,21 +211,6 @@ describe("makeChatSdkDiscord REST operations", () => {
     if (error.retryAfter === undefined) throw new Error("expected retryAfter")
     expect(error.message).toBe("limited")
     expect(Duration.toMillis(error.retryAfter)).toBe(123)
-  })
-
-  test("rejects DM channel info before cross-channel posting", async () => {
-    const adapter = new FakeDiscordAdapter()
-    adapter.fetchChannelInfo = (channelId: string) => {
-      adapter.calls.push(["fetchChannelInfo", { channelId }])
-      return Promise.resolve({ id: channelId, isDM: true, metadata: {} })
-    }
-    const discord = makeChatSdkDiscord(adapter)
-
-    await expect(Effect.runPromise(discord.postChannelMessage("g1", "dm1", "hello"))).rejects.toMatchObject({
-      _tag: "DiscordError",
-      message: "Discord DMs are not supported"
-    })
-    expect(adapter.calls.map((item) => item[0])).toEqual(["encodeThreadId", "fetchChannelInfo"])
   })
 
   test("preserves raw Discord REST retry-after metadata", async () => {

@@ -23,17 +23,18 @@ describe("startLoopbackServer", () => {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
-                action: "followUpMessage",
-                target: { guildId: "g1", channelId: "c1" },
-                args: { content: "from http" }
+                action: "addReaction",
+                target: { guildId: "g1", channelId: "c1", messageId: "m1" },
+                args: { emoji: "rocket" }
               })
             })
           )
           const body = yield* Effect.tryPromise(() => response.json())
 
           expect(server.url.startsWith("http://127.0.0.1:")).toBe(true)
-          expect(body).toEqual({ ok: true, result: { id: "posted-1" } })
-          expect(discord.messages).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, content: "from http" }])
+          expect(body).toEqual({ ok: true, result: { reacted: true } })
+          expect(discord.reactions).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, messageId: "m1", emoji: "rocket", op: "add" }])
+          expect(discord.messages).toEqual([])
         })
       )
     )
@@ -78,9 +79,9 @@ describe("startLoopbackServer", () => {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({
-                action: "followUpMessage",
-                target: { guildId: "g1", channelId: "c2" },
-                args: { content: "outside" }
+                action: "addReaction",
+                target: { guildId: "g1", channelId: "c2", messageId: "m1" },
+                args: { emoji: "rocket" }
               })
             })
           )

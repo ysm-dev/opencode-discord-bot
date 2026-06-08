@@ -16,6 +16,8 @@ describe("Discord tool scaffolding", () => {
     expect(source).toContain(".enum([")
     expect(source).toContain('"fetchHistory"')
     expect(source).toContain('"addReaction"')
+    expect(source).not.toContain('"followUpMessage"')
+    expect(source).not.toContain('"postOtherChannel"')
     expect(source).toContain(".record(tool.schema.string(), tool.schema.unknown())")
     expect(source).toContain("fetch")
     expect(source).not.toContain("export const parameters")

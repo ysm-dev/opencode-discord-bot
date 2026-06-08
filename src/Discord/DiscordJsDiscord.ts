@@ -246,12 +246,6 @@ export const makeDiscordJsDiscord = (client: DiscordJsClientLike): DiscordServic
       if (channel.threads === undefined) return yield* Effect.fail(new DiscordError({ message: "Discord channel cannot create threads" }))
       return yield* tryDiscord(() => channel.threads?.create({ name }) ?? Promise.resolve({ id: "" }))
     }),
-  postChannelMessage: (_guildId, channelId, content) =>
-    Effect.gen(function* () {
-      const channel = yield* fetchTextChannel(client, { guildId: _guildId, channelId })
-      const result = yield* tryDiscord(() => channel.send(content))
-      return { id: result.id }
-    }),
   pinMessage: (scope, messageId) =>
     Effect.gen(function* () {
       const message = yield* fetchMessage(client, scope, messageId)

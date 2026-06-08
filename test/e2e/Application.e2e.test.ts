@@ -64,17 +64,20 @@ describe("application e2e", () => {
       const running = Effect.runPromise(app.handleMessage(input))
       await new Promise((resolve) => setTimeout(resolve, 0))
       const toolResponse = await Effect.runPromise(
-        app.handleTool({ action: "followUpMessage", target: { guildId: "g1", channelId: "c1" }, args: { content: "extra" } })
+        app.handleTool({ action: "addReaction", target: { guildId: "g1", channelId: "c1", messageId: "m1" }, args: { emoji: "rocket" } })
       )
       releaseTurn?.()
       await running
 
       const toolFile = await readFile(join(projectDir, ".opencode", "tools", "discord-bridge.ts"), "utf8")
       expect(toolFile).toContain("http://127.0.0.1:8787/tool")
+      expect(toolFile).not.toContain('"followUpMessage"')
+      expect(toolFile).not.toContain('"postOtherChannel"')
       expect(prompts[0]?.prompt).toContain("plan.txt [text/plain; 10 bytes; file://")
       expect(prompts[0]?.prompt).toContain("(discord target: guildId=g1 channelId=c1 messageId=m1)")
       expect(prompts[0]?.parts).toEqual([{ type: "file", mime: "text/plain", filename: "plan.txt", url: `file://${projectDir}/plan.txt` }])
-      expect(discord.messages.map((item) => item.content)).toEqual(["Released", "extra"])
+      expect(discord.messages.map((item) => item.content)).toEqual(["Released"])
+      expect(discord.reactions).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, messageId: "m1", emoji: "rocket", op: "add" }])
       expect(toolResponse.ok).toBe(true)
     } finally {
       await rm(projectDir, { recursive: true, force: true })

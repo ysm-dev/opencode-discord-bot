@@ -8,10 +8,8 @@ const RawToolsSchema = Schema.Struct({
   reactions: OptionalBoolean,
   attachFiles: OptionalBoolean,
   fetchHistory: OptionalBoolean,
-  followUpMessages: OptionalBoolean,
   createThread: OptionalBoolean,
   editDeleteOwn: OptionalBoolean,
-  postOtherChannels: OptionalBoolean,
   pin: OptionalBoolean
 })
 

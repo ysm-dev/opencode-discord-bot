@@ -31,7 +31,7 @@ describe("handleToolRequest high-risk actions", () => {
         }
       ]
     })
-    const config = withTools({ createThread: true, editDeleteOwn: true, postOtherChannels: true, pin: true })
+    const config = withTools({ createThread: true, editDeleteOwn: true, pin: true })
 
     const created = await Effect.runPromise(
       handleToolRequest(
@@ -60,14 +60,6 @@ describe("handleToolRequest high-risk actions", () => {
         { botId: "bot-1" }
       )
     )
-    const posted = await Effect.runPromise(
-      handleToolRequest(
-        { action: "postOtherChannel", target: { guildId: "g1", channelId: "c2" }, args: { content: "elsewhere" } },
-        config,
-        "/repo",
-        discord
-      )
-    )
     const pinned = await Effect.runPromise(
       handleToolRequest({ action: "pin", target: { guildId: "g1", channelId: "c1", messageId: "m1" }, args: {} }, config, "/repo", discord)
     )
@@ -83,11 +75,9 @@ describe("handleToolRequest high-risk actions", () => {
     expect(created).toEqual({ ok: true, result: { id: "thread-1" } })
     expect(edited).toEqual({ ok: true, result: { edited: true } })
     expect(deleted).toEqual({ ok: true, result: { deleted: true } })
-    expect(posted).toEqual({ ok: true, result: { id: "posted-2" } })
     expect(pinned).toEqual({ ok: true, result: { pinned: true } })
     expect(unpinned).toEqual({ ok: true, result: { pinned: false } })
     expect(discord.threads).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, name: "work" }])
-    expect(discord.channelMessages).toEqual([{ guildId: "g1", channelId: "c2", content: "elsewhere" }])
     expect(discord.pins.map((item) => item.op)).toEqual(["pin", "unpin"])
   })
 
@@ -136,18 +126,5 @@ describe("handleToolRequest high-risk actions", () => {
     expect(deleted).toEqual({ ok: false, error: "messageId must refer to a bot-authored message" })
     expect(discord.edits).toEqual([])
     expect(discord.deletes).toEqual([])
-  })
-
-  test("rejects DM-like targets even when cross-channel posting is enabled", async () => {
-    const response = await Effect.runPromise(
-      handleToolRequest(
-        { action: "postOtherChannel", target: { guildId: "@me", channelId: "dm" }, args: { content: "nope" } },
-        withTools({ postOtherChannels: true }),
-        "/repo",
-        makeMemoryDiscord()
-      )
-    )
-
-    expect(response).toEqual({ ok: false, error: "Discord DMs are not supported" })
   })
 })

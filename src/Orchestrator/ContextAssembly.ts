@@ -18,7 +18,7 @@ type ContextInput = {
 }
 
 const preamble = (botUserId: string) =>
-  `Discord bridge context for <@${botUserId}>. <@id> pings that user in Discord. Use discord target metadata when calling bridge tools. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
+  `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord. Use discord target metadata when calling non-message bridge tools. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
 
 const timestamp = (value: string): string => {
   const date = new Date(value)

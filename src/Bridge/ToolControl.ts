@@ -20,15 +20,11 @@ const actionFlag = (action: string): keyof ToolConfig | undefined => {
       return "attachFiles"
     case "fetchHistory":
       return "fetchHistory"
-    case "followUpMessage":
-      return "followUpMessages"
     case "createThread":
       return "createThread"
     case "editOwnMessage":
     case "deleteOwnMessage":
       return "editDeleteOwn"
-    case "postOtherChannel":
-      return "postOtherChannels"
     case "pin":
     case "unpin":
       return "pin"
@@ -73,18 +69,6 @@ const attachmentPath = Effect.fn("attachmentPath")(function* (projectDir: string
 })
 
 const disabled = (action: string): ToolResponse => ({ ok: false, error: `Action ${action} is disabled` })
-
-const followUp = Effect.fn("toolFollowUp")(function* (
-  request: ToolRequest,
-  scope: DiscordScope,
-  config: RuntimeConfig,
-  discord: DiscordService
-) {
-  const content = stringArg(request, "content")
-  if (content === undefined || content.trim() === "") return { ok: false, error: "content is required" } satisfies ToolResponse
-  const result = yield* discord.postMessage(scope, sanitizeDiscordContent(content, config.guards))
-  return { ok: true, result } satisfies ToolResponse
-})
 
 const reaction = Effect.fn("toolReaction")(function* (
   request: ToolRequest,
@@ -183,21 +167,6 @@ const deleteOwnMessage = Effect.fn("toolDeleteOwnMessage")(function* (
   return { ok: true, result: { deleted: true } } satisfies ToolResponse
 })
 
-const postOtherChannel = Effect.fn("toolPostOtherChannel")(function* (
-  request: ToolRequest,
-  config: RuntimeConfig,
-  discord: DiscordService
-) {
-  const guildId = request.target.guildId
-  const channelId = request.target.channelId
-  const content = stringArg(request, "content")
-  if (guildId === undefined || channelId === undefined || content === undefined || content.trim() === "") {
-    return { ok: false, error: "guildId, channelId, and content are required" } satisfies ToolResponse
-  }
-  const result = yield* discord.postChannelMessage(guildId, channelId, sanitizeDiscordContent(content, config.guards))
-  return { ok: true, result } satisfies ToolResponse
-})
-
 const pin = Effect.fn("toolPin")(function* (
   request: ToolRequest,
   scope: DiscordScope,
@@ -228,13 +197,11 @@ export const handleToolRequest = Effect.fn("handleToolRequest")(function* (
 
   const scope = scopeFromRequest(request)
   if (typeof scope === "string") return { ok: false, error: scope } satisfies ToolResponse
-  if (request.action !== "postOtherChannel" && !isAllowedScope(scope, options.allowedScopes)) {
+  if (!isAllowedScope(scope, options.allowedScopes)) {
     return { ok: false, error: "Discord target is outside the active turn scope" } satisfies ToolResponse
   }
 
   switch (request.action) {
-    case "followUpMessage":
-      return yield* followUp(request, scope, config, discord)
     case "addReaction":
       return yield* reaction(request, scope, discord, "add")
     case "removeReaction":
@@ -249,8 +216,6 @@ export const handleToolRequest = Effect.fn("handleToolRequest")(function* (
       return yield* editOwnMessage(request, scope, config, discord, options)
     case "deleteOwnMessage":
       return yield* deleteOwnMessage(request, scope, config, discord, options)
-    case "postOtherChannel":
-      return yield* postOtherChannel(request, config, discord)
     case "pin":
       return yield* pin(request, scope, discord, "pin")
     case "unpin":

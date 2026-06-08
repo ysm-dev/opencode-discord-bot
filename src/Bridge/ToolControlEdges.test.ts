@@ -28,7 +28,7 @@ test("rejects missing attachment files inside the project", async () => {
 test("rejects incomplete high-risk tool payloads before dispatch", async () => {
   const config = {
     ...defaultConfig,
-    tools: { ...defaultConfig.tools, editDeleteOwn: true, postOtherChannels: true }
+    tools: { ...defaultConfig.tools, editDeleteOwn: true }
   }
   const discord = makeMemoryDiscord()
 
@@ -40,10 +40,6 @@ test("rejects incomplete high-risk tool payloads before dispatch", async () => {
       discord
     )
   )
-  const post = await Effect.runPromise(
-    handleToolRequest({ action: "postOtherChannel", target: { guildId: "g1", channelId: "c2" }, args: {} }, config, "/repo", discord)
-  )
 
   expect(edit).toEqual({ ok: false, error: "messageId and content are required" })
-  expect(post).toEqual({ ok: false, error: "guildId, channelId, and content are required" })
 })

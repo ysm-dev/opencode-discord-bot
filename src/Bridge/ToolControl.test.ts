@@ -14,14 +14,14 @@ const withTools = (tools: Partial<ToolConfig>): RuntimeConfig => ({
 })
 
 describe("handleToolRequest", () => {
-  test("allows safe default actions through the Discord port", async () => {
+  test("allows safe default non-message actions through the Discord port", async () => {
     const discord = makeMemoryDiscord()
     const response = await Effect.runPromise(
       handleToolRequest(
         {
-          action: "followUpMessage",
-          target: { guildId: "g1", channelId: "c1" },
-          args: { content: "done" }
+          action: "addReaction",
+          target: { guildId: "g1", channelId: "c1", messageId: "m1" },
+          args: { emoji: "rocket" }
         },
         defaultConfig,
         "/repo",
@@ -29,14 +29,15 @@ describe("handleToolRequest", () => {
       )
     )
 
-    expect(response.ok).toBe(true)
-    expect(discord.messages).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, content: "done" }])
+    expect(response).toEqual({ ok: true, result: { reacted: true } })
+    expect(discord.reactions).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, messageId: "m1", emoji: "rocket", op: "add" }])
+    expect(discord.messages).toEqual([])
   })
 
-  test("neutralizes mass mentions in follow-up tool content", async () => {
+  test("rejects stale message-sending bridge actions", async () => {
     const discord = makeMemoryDiscord()
 
-    const response = await Effect.runPromise(
+    const followUp = await Effect.runPromise(
       handleToolRequest(
         {
           action: "followUpMessage",
@@ -48,9 +49,22 @@ describe("handleToolRequest", () => {
         discord
       )
     )
+    const otherChannel = await Effect.runPromise(
+      handleToolRequest(
+        {
+          action: "postOtherChannel",
+          target: { guildId: "g1", channelId: "c2" },
+          args: { content: "elsewhere" }
+        },
+        defaultConfig,
+        "/repo",
+        discord
+      )
+    )
 
-    expect(response.ok).toBe(true)
-    expect(discord.messages).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, content: "@ everyone @ here <@& 123>" }])
+    expect(followUp).toEqual({ ok: false, error: "Unknown action followUpMessage" })
+    expect(otherChannel).toEqual({ ok: false, error: "Unknown action postOtherChannel" })
+    expect(discord.messages).toEqual([])
   })
 
   test("blocks higher-risk actions unless explicitly enabled", async () => {
@@ -69,7 +83,7 @@ describe("handleToolRequest", () => {
   test("rejects DMs and unsafe attachment paths", async () => {
     const dm = await Effect.runPromise(
       handleToolRequest(
-        { action: "followUpMessage", target: { channelId: "dm1" }, args: { content: "nope" } },
+        { action: "addReaction", target: { guildId: "@me", channelId: "dm1", messageId: "m1" }, args: { emoji: "rocket" } },
         defaultConfig,
         "/repo",
         makeMemoryDiscord()
@@ -183,7 +197,7 @@ describe("handleToolRequest action dispatch", () => {
   test("rejects default tool targets outside the active turn scope", async () => {
     const response = await Effect.runPromise(
       handleToolRequest(
-        { action: "followUpMessage", target: { guildId: "g1", channelId: "other" }, args: { content: "nope" } },
+        { action: "addReaction", target: { guildId: "g1", channelId: "other", messageId: "m1" }, args: { emoji: "rocket" } },
         defaultConfig,
         "/repo",
         makeMemoryDiscord(),
@@ -197,7 +211,7 @@ describe("handleToolRequest action dispatch", () => {
   test("returns validation errors for malformed or unsupported requests", async () => {
     const disabled = await Effect.runPromise(
       handleToolRequest(
-        { action: "followUpMessage", target: { guildId: "g1", channelId: "c1" }, args: { content: "x" } },
+        { action: "addReaction", target: { guildId: "g1", channelId: "c1", messageId: "m1" }, args: { emoji: "rocket" } },
         withTools({ enabled: false }),
         "/repo",
         makeMemoryDiscord()
@@ -206,14 +220,6 @@ describe("handleToolRequest action dispatch", () => {
     const unknown = await Effect.runPromise(
       handleToolRequest(
         { action: "unknown", target: { guildId: "g1", channelId: "c1" }, args: {} },
-        defaultConfig,
-        "/repo",
-        makeMemoryDiscord()
-      )
-    )
-    const missingContent = await Effect.runPromise(
-      handleToolRequest(
-        { action: "followUpMessage", target: { guildId: "g1", channelId: "c1" }, args: {} },
         defaultConfig,
         "/repo",
         makeMemoryDiscord()
@@ -238,7 +244,6 @@ describe("handleToolRequest action dispatch", () => {
 
     expect(disabled).toEqual({ ok: false, error: "Discord bridge tools are disabled" })
     expect(unknown).toEqual({ ok: false, error: "Unknown action unknown" })
-    expect(missingContent).toEqual({ ok: false, error: "content is required" })
     expect(missingReactionFields).toEqual({ ok: false, error: "messageId and emoji are required" })
     expect(missingPath).toEqual({ ok: false, error: "path is required" })
   })

@@ -134,7 +134,6 @@ describe("makeDiscordJsDiscord", () => {
       await Effect.runPromise(discord.removeReaction(scope, "m1", "rocket"))
       const attached = await Effect.runPromise(discord.attachFile(scope, file))
       expect(await Effect.runPromise(discord.createThread(scope, "work"))).toEqual({ id: "thread-1" })
-      expect(await Effect.runPromise(discord.postChannelMessage("g1", "c2", "hello"))).toEqual({ id: "posted-1" })
       await Effect.runPromise(discord.pinMessage(scope, "m1"))
       await Effect.runPromise(discord.unpinMessage(scope, "m1"))
 

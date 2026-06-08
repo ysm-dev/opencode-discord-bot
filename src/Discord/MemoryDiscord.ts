@@ -20,7 +20,6 @@ export type MemoryDiscord = DiscordService & {
   readonly attachments: Array<{ readonly scope: DiscordScope; readonly path: string }>
   readonly threads: Array<{ readonly scope: DiscordScope; readonly name: string }>
   readonly deletes: Array<{ readonly scope: DiscordScope; readonly messageId: string }>
-  readonly channelMessages: Array<{ readonly guildId: string; readonly channelId: string; readonly content: string }>
   readonly pins: Array<{ readonly scope: DiscordScope; readonly messageId: string; readonly op: "pin" | "unpin" }>
 }
 
@@ -34,7 +33,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
   const attachments: MemoryDiscord["attachments"] = []
   const threads: MemoryDiscord["threads"] = []
   const deletes: MemoryDiscord["deletes"] = []
-  const channelMessages: MemoryDiscord["channelMessages"] = []
   const pins: MemoryDiscord["pins"] = []
 
   return {
@@ -46,7 +44,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
     attachments,
     threads,
     deletes,
-    channelMessages,
     pins,
     fetchContext: (_scope, limit) => Effect.succeed(context.slice(Math.max(0, context.length - limit))),
     sendTyping: (scope) => Effect.sync(() => typingScopes.push(scope)).pipe(Effect.asVoid),
@@ -73,12 +70,6 @@ export const makeMemoryDiscord = (options: MemoryOptions = {}): MemoryDiscord =>
         return { id: `thread-${nextId}` }
       }),
     deleteMessage: (scope, messageId) => Effect.sync(() => deletes.push({ scope, messageId })).pipe(Effect.asVoid),
-    postChannelMessage: (guildId, channelId, content) =>
-      Effect.sync(() => {
-        nextId += 1
-        channelMessages.push({ guildId, channelId, content })
-        return { id: `posted-${nextId}` }
-      }),
     pinMessage: (scope, messageId) => Effect.sync(() => pins.push({ scope, messageId, op: "pin" })).pipe(Effect.asVoid),
     unpinMessage: (scope, messageId) => Effect.sync(() => pins.push({ scope, messageId, op: "unpin" })).pipe(Effect.asVoid)
   }

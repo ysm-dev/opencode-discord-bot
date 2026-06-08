@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { basename } from "node:path"
 import { createDiscordAdapter, type DiscordThreadId } from "@chat-adapter/discord"
-import type { AdapterPostableMessage, ChannelInfo, FetchOptions, FetchResult, Message, PostableRaw, RawMessage } from "chat"
+import type { AdapterPostableMessage, FetchOptions, FetchResult, Message, PostableRaw, RawMessage } from "chat"
 import { Duration, Effect } from "effect"
 import type { DiscordAttachment, DiscordMessage, DiscordScope } from "../Schema.ts"
 import { DiscordError, type DiscordService } from "./DiscordPort.ts"
@@ -9,14 +9,12 @@ import { DiscordError, type DiscordService } from "./DiscordPort.ts"
 type ChatDiscordAdapter = {
   readonly encodeThreadId: (input: DiscordThreadId) => string
   readonly postMessage: (threadId: string, message: AdapterPostableMessage) => Promise<RawMessage<unknown>>
-  readonly postChannelMessage: (channelId: string, message: AdapterPostableMessage) => Promise<RawMessage<unknown>>
   readonly editMessage: (threadId: string, messageId: string, message: AdapterPostableMessage) => Promise<RawMessage<unknown>>
   readonly deleteMessage: (threadId: string, messageId: string) => Promise<void>
   readonly startTyping: (threadId: string, status?: string) => Promise<void>
   readonly addReaction: (threadId: string, messageId: string, emoji: string) => Promise<void>
   readonly removeReaction: (threadId: string, messageId: string, emoji: string) => Promise<void>
   readonly fetchMessages: (threadId: string, options?: FetchOptions) => Promise<FetchResult<unknown>>
-  readonly fetchChannelInfo?: ((channelId: string) => Promise<ChannelInfo>) | undefined
 }
 
 type LiveDiscordOptions = {
@@ -36,11 +34,6 @@ const mentions = (content: string): ReadonlyArray<string> => [...content.matchAl
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
-
-const stringField = (record: Readonly<Record<string, unknown>>, key: string): string | undefined => {
-  const value = record[key]
-  return typeof value === "string" ? value : undefined
-}
 
 const attachments = (message: Message<unknown>): ReadonlyArray<DiscordAttachment> =>
   message.attachments.map((item, index) => ({
@@ -85,17 +78,6 @@ const retryAfterFromCause = (cause: unknown) => {
     return Duration.millis(cause.retry_after * 1000)
   }
   return undefined
-}
-
-const validateGuildChannel = async (adapter: ChatDiscordAdapter, guildId: string, channelThreadId: string): Promise<void> => {
-  if (adapter.fetchChannelInfo === undefined) return
-  const info = await adapter.fetchChannelInfo(channelThreadId)
-  if (info.isDM === true) throw new DiscordError({ message: "Discord DMs are not supported" })
-  const raw = info.metadata.raw
-  const actualGuildId = isRecord(raw) ? stringField(raw, "guild_id") : undefined
-  if (actualGuildId !== undefined && actualGuildId !== guildId) {
-    throw new DiscordError({ message: "Discord channel does not belong to the requested guild" })
-  }
 }
 
 const tryAdapter = <A>(operation: () => Promise<A>): Effect.Effect<A, DiscordError> =>
@@ -184,23 +166,11 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
       method: "POST",
       body: JSON.stringify({ name, type: 11 })
     }).pipe(Effect.map((data) => ({ id: isRecord(data) && typeof data.id === "string" ? data.id : "" }))),
-  postChannelMessage: (guildId, channelId, content) =>
-    tryAdapter(async () => {
-      const encodedChannelId = adapter.encodeThreadId({ guildId, channelId })
-      await validateGuildChannel(adapter, guildId, encodedChannelId)
-      const result = await adapter.postChannelMessage(
-        encodedChannelId,
-        normalizeMentionsForChatAdapter(sanitizeGuildContent(guildId, content))
-      )
-      return { id: result.id }
-    }),
   pinMessage: (scope, messageId) =>
     rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "PUT" }).pipe(Effect.asVoid),
   unpinMessage: (scope, messageId) =>
     rawDiscord(raw, `/channels/${scope.threadId ?? scope.channelId}/pins/${messageId}`, { method: "DELETE" }).pipe(Effect.asVoid)
 })
-
-const sanitizeGuildContent = (_guildId: string, content: string): string => content
 
 export const makeLiveChatSdkDiscord = (options: LiveDiscordOptions): DiscordService =>
   makeChatSdkDiscord(

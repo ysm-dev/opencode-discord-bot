@@ -24,7 +24,7 @@ describe("loadConfigFromSources", () => {
           "threads": { "activeByRecentBotParticipation": false },
           "concurrency": { "strategy": "burst", "globalMaxActiveTurns": 4 },
           "guards": { "ignoreBots": false, "stripMassMentions": false, "redactSecretsInErrors": false, "maxTurnMs": 1000 },
-          "tools": { "createThread": true, "pin": true }
+          "tools": { "createThread": true, "pin": true, "followUpMessages": true, "postOtherChannels": true }
         }`
       })
     )
@@ -48,6 +48,8 @@ describe("loadConfigFromSources", () => {
     expect(config.tools.reactions).toBe(true)
     expect(config.tools.createThread).toBe(true)
     expect(config.tools.pin).toBe(true)
+    expect("followUpMessages" in config.tools).toBe(false)
+    expect("postOtherChannels" in config.tools).toBe(false)
   })
 
   test("uses the normative localhost defaults", async () => {
@@ -59,8 +61,8 @@ describe("loadConfigFromSources", () => {
     expect(config.bridge.port).toBe(8787)
     expect(config.context.messages).toBe(30)
     expect(config.tools.autoInstall).toBe(true)
-    expect(config.tools.followUpMessages).toBe(true)
-    expect(config.tools.postOtherChannels).toBe(false)
+    expect("followUpMessages" in config.tools).toBe(false)
+    expect("postOtherChannels" in config.tools).toBe(false)
   })
 
   test("fails fast when DISCORD_TOKEN is missing", async () => {
