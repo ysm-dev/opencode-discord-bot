@@ -7,7 +7,7 @@ const RawToolsSchema = Schema.Struct({
   autoInstall: OptionalBoolean,
   reactions: OptionalBoolean,
   attachFiles: OptionalBoolean,
-  fetchHistory: OptionalBoolean,
+  searchMessages: OptionalBoolean,
   createThread: OptionalBoolean
 })
 

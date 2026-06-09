@@ -194,7 +194,7 @@ export const makeDiscordJsDiscord = (client: DiscordJsClientLike): DiscordServic
         return mapped === undefined ? [] : [mapped]
       })
     }),
-  fetchHistory: (scope, limit) => makeDiscordJsDiscord(client).fetchContext(scope, limit),
+  searchMessages: () => Effect.fail(new DiscordError({ message: "Discord search is only available through the live REST adapter" })),
   sendTyping: (scope) =>
     Effect.gen(function* () {
       const channel = yield* fetchTextChannel(client, scope)

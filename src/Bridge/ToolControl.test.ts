@@ -104,7 +104,7 @@ describe("handleToolRequest", () => {
 })
 
 describe("handleToolRequest action dispatch", () => {
-  test("dispatches reactions, history, and safe attachments", async () => {
+  test("dispatches reactions, search, and safe attachments", async () => {
     const projectDir = await mkdtemp(join(tmpdir(), "ocdb-tool-"))
     await mkdir(join(projectDir, "out"), { recursive: true })
     await writeFile(join(projectDir, "out", "report.txt"), "report")
@@ -137,9 +137,9 @@ describe("handleToolRequest action dispatch", () => {
           discord
         )
       )
-      const history = await Effect.runPromise(
+      const search = await Effect.runPromise(
         handleToolRequest(
-          { action: "fetchHistory", target: { guildId: "g1", channelId: "c1" }, args: { limit: 1 } },
+          { action: "searchMessages", target: { guildId: "g1" }, args: { query: "hi", limit: 1 } },
           defaultConfig,
           projectDir,
           discord
@@ -156,7 +156,15 @@ describe("handleToolRequest action dispatch", () => {
       const attachmentRealpath = await realpath(join(projectDir, "out", "report.txt"))
 
       expect(add).toEqual({ ok: true, result: { reacted: true } })
-      expect(history.ok).toBe(true)
+      expect(search).toEqual({
+        ok: true,
+        result: {
+          totalResults: 1,
+          offset: 0,
+          hasMore: false,
+          messages: discord.context
+        }
+      })
       expect(attach).toEqual({ ok: true, result: { path: attachmentRealpath } })
       expect(discord.reactions.map((item) => item.op)).toEqual(["add"])
       expect(discord.attachments).toEqual([{ scope: { guildId: "g1", channelId: "c1" }, path: attachmentRealpath }])
@@ -199,6 +207,21 @@ describe("handleToolRequest action dispatch", () => {
     expect(response).toEqual({ ok: false, error: "Discord target is outside the active turn scope" })
   })
 
+  test("allows search across the active turn guild", async () => {
+    const discord = makeMemoryDiscord({ context: [] })
+    const response = await Effect.runPromise(
+      handleToolRequest(
+        { action: "searchMessages", target: { guildId: "g1" }, args: { query: "from:<@u1>" } },
+        defaultConfig,
+        "/repo",
+        discord,
+        { allowedScopes: [{ guildId: "g1", channelId: "c1" }] }
+      )
+    )
+
+    expect(response).toEqual({ ok: true, result: { totalResults: 0, offset: 0, hasMore: false, messages: [] } })
+  })
+
   test("returns validation errors for malformed or unsupported requests", async () => {
     const disabled = await Effect.runPromise(
       handleToolRequest(
@@ -232,10 +255,14 @@ describe("handleToolRequest action dispatch", () => {
         makeMemoryDiscord()
       )
     )
+    const missingQuery = await Effect.runPromise(
+      handleToolRequest({ action: "searchMessages", target: { guildId: "g1" }, args: {} }, defaultConfig, "/repo", makeMemoryDiscord())
+    )
 
     expect(disabled).toEqual({ ok: false, error: "Discord bridge tools are disabled" })
     expect(unknown).toEqual({ ok: false, error: "Unknown action unknown" })
     expect(missingReactionFields).toEqual({ ok: false, error: "messageId and emoji are required" })
     expect(missingPath).toEqual({ ok: false, error: "path is required" })
+    expect(missingQuery).toEqual({ ok: false, error: "query is required" })
   })
 })

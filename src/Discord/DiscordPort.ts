@@ -1,5 +1,5 @@
 import { Context, Data, type Duration, type Effect } from "effect"
-import type { DiscordMessage, DiscordScope } from "../Schema.ts"
+import type { DiscordMessage, DiscordScope, DiscordSearchQuery, DiscordSearchResult } from "../Schema.ts"
 
 export class DiscordError extends Data.TaggedError("DiscordError")<{
   readonly message: string
@@ -17,7 +17,11 @@ export type DiscordService = {
   readonly postMessage: (scope: DiscordScope, content: string) => Effect.Effect<{ readonly id: string }, DiscordError>
   readonly editMessage: (scope: DiscordScope, messageId: string, content: string) => Effect.Effect<void, DiscordError>
   readonly addReaction: (scope: DiscordScope, messageId: string, emoji: string) => Effect.Effect<void, DiscordError>
-  readonly fetchHistory: (scope: DiscordScope, limit: number) => Effect.Effect<ReadonlyArray<DiscordMessage>, DiscordError>
+  readonly searchMessages: (
+    scope: DiscordScope,
+    query: DiscordSearchQuery,
+    paging: { readonly limit: number; readonly offset: number }
+  ) => Effect.Effect<DiscordSearchResult, DiscordError>
   readonly attachFile: (scope: DiscordScope, path: string) => Effect.Effect<{ readonly path: string }, DiscordError>
   readonly createThread: (scope: DiscordScope, name: string) => Effect.Effect<{ readonly id: string }, DiscordError>
   readonly deleteMessage: (scope: DiscordScope, messageId: string) => Effect.Effect<void, DiscordError>

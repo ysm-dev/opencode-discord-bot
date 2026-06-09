@@ -16,7 +16,7 @@ export type ToolConfig = {
   readonly autoInstall: boolean
   readonly reactions: boolean
   readonly attachFiles: boolean
-  readonly fetchHistory: boolean
+  readonly searchMessages: boolean
   readonly createThread: boolean
 }
 
@@ -91,7 +91,7 @@ export const defaultConfig: RuntimeConfig = {
     autoInstall: true,
     reactions: true,
     attachFiles: true,
-    fetchHistory: true,
+    searchMessages: true,
     createThread: false
   },
   streaming: {
@@ -254,7 +254,7 @@ export const loadConfigFromSources = Effect.fn("loadConfigFromSources")(function
       autoInstall: readBoolean(tools, "autoInstall", defaultConfig.tools.autoInstall),
       reactions: readBoolean(tools, "reactions", defaultConfig.tools.reactions),
       attachFiles: readBoolean(tools, "attachFiles", defaultConfig.tools.attachFiles),
-      fetchHistory: readBoolean(tools, "fetchHistory", defaultConfig.tools.fetchHistory),
+      searchMessages: readBoolean(tools, "searchMessages", defaultConfig.tools.searchMessages),
       createThread: readBoolean(tools, "createThread", defaultConfig.tools.createThread)
     },
     streaming: {

@@ -50,6 +50,42 @@ export type DiscordMessage = {
   readonly isSystem?: boolean
 }
 
+export type DiscordSearchQuery = {
+  readonly content?: string
+  readonly authors: ReadonlyArray<string>
+  readonly authorNames: ReadonlyArray<string>
+  readonly authorTypes: ReadonlyArray<string>
+  readonly channels: ReadonlyArray<string>
+  readonly channelNames: ReadonlyArray<string>
+  readonly mentions: ReadonlyArray<string>
+  readonly mentionNames: ReadonlyArray<string>
+  readonly roleMentions: ReadonlyArray<string>
+  readonly repliedToUsers: ReadonlyArray<string>
+  readonly repliedToUserNames: ReadonlyArray<string>
+  readonly repliedToMessages: ReadonlyArray<string>
+  readonly has: ReadonlyArray<string>
+  readonly embedTypes: ReadonlyArray<string>
+  readonly embedProviders: ReadonlyArray<string>
+  readonly linkHostnames: ReadonlyArray<string>
+  readonly attachmentFilenames: ReadonlyArray<string>
+  readonly attachmentExtensions: ReadonlyArray<string>
+  readonly maxId?: string
+  readonly minId?: string
+  readonly slop?: number
+  readonly pinned?: boolean
+  readonly mentionEveryone?: boolean
+  readonly sortBy?: "timestamp" | "relevance"
+  readonly sortOrder?: "asc" | "desc"
+  readonly includeNsfw?: boolean
+}
+
+export type DiscordSearchResult = {
+  readonly totalResults: number
+  readonly offset: number
+  readonly hasMore: boolean
+  readonly messages: ReadonlyArray<DiscordMessage>
+}
+
 export type ToolTarget = {
   readonly guildId?: string | undefined
   readonly channelId?: string | undefined

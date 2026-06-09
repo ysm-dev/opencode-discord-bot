@@ -112,7 +112,6 @@ describe("makeDiscordJsDiscord", () => {
       const file = join(directory, "upload.txt")
       await writeFile(file, "upload")
       const context = await Effect.runPromise(discord.fetchContext(scope, 1))
-      const history = await Effect.runPromise(discord.fetchHistory(scope, 1))
       await Effect.runPromise(discord.sendTyping(scope))
       const posted = await Effect.runPromise(discord.postMessage(scope, "hello"))
       await Effect.runPromise(discord.editMessage(scope, "m1", "edited"))
@@ -122,7 +121,6 @@ describe("makeDiscordJsDiscord", () => {
       expect(await Effect.runPromise(discord.createThread(scope, "work"))).toEqual({ id: "thread-1" })
 
       expect(context).toHaveLength(1)
-      expect(history).toHaveLength(1)
       expect(posted).toEqual({ id: "posted-1" })
       expect(attached).toEqual({ path: "posted-1" })
       expect(calls.map((call) => call[0])).toContain("delete")

@@ -5,6 +5,8 @@ import type { AdapterPostableMessage, FetchOptions, FetchResult, Message, Postab
 import { Duration, Effect } from "effect"
 import type { DiscordAttachment, DiscordMessage, DiscordReaction, DiscordScope } from "../Schema.ts"
 import { DiscordError, type DiscordService } from "./DiscordPort.ts"
+import { type RawDiscordOptions, rawDiscord, rawDiscordRequest } from "./DiscordRest.ts"
+import { searchDiscordMessages } from "./DiscordSearchRest.ts"
 
 type ChatDiscordAdapter = {
   readonly encodeThreadId: (input: DiscordThreadId) => string
@@ -117,41 +119,6 @@ const tryAdapter = <A>(operation: () => Promise<A>): Effect.Effect<A, DiscordErr
           })
   })
 
-const retryAfterHeader = (response: Response) => {
-  const value = response.headers.get("retry-after")
-  if (value === null) return undefined
-  const seconds = Number(value)
-  return Number.isFinite(seconds) && seconds >= 0 ? Duration.millis(seconds * 1000) : undefined
-}
-
-type RawDiscordOptions = {
-  readonly botToken: string
-  readonly apiUrl?: string | undefined
-  readonly nicknameCacheTtlMs?: number | undefined
-}
-
-const rawDiscordRequest = async (options: RawDiscordOptions | undefined, path: string, init: RequestInit): Promise<unknown> => {
-  if (options === undefined) throw new Error("Discord adapter does not expose this operation")
-  const response = await fetch(`${options.apiUrl ?? "https://discord.com/api/v10"}${path}`, {
-    ...init,
-    headers: {
-      authorization: `Bot ${options.botToken}`,
-      "content-type": "application/json",
-      ...init.headers
-    }
-  })
-  if (!response.ok)
-    throw new DiscordError({
-      message: `Discord REST ${response.status}: ${await response.text()}`,
-      retryAfter: retryAfterHeader(response)
-    })
-  if (response.status === 204) return {}
-  return await response.json()
-}
-
-const rawDiscord = (options: RawDiscordOptions | undefined, path: string, init: RequestInit): Effect.Effect<unknown, DiscordError> =>
-  tryAdapter(() => rawDiscordRequest(options, path, init))
-
 const memberNickname = (data: unknown): string | undefined => {
   if (!isRecord(data)) return undefined
   const nick = data.nick
@@ -224,7 +191,7 @@ export const makeChatSdkDiscord = (adapter: ChatDiscordAdapter, raw: RawDiscordO
 
   return {
     fetchContext: fetchMessages,
-    fetchHistory: fetchMessages,
+    searchMessages: (scope, query, paging) => tryAdapter(() => searchDiscordMessages(raw, scope, query, paging, resolveNickname)),
     sendTyping: (scope) => tryAdapter(() => adapter.startTyping(threadIdFromScope(adapter, scope))).pipe(Effect.asVoid),
     postMessage: (scope, content) =>
       tryAdapter(async () => {

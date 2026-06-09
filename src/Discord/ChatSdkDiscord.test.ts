@@ -72,7 +72,6 @@ describe("makeChatSdkDiscord", () => {
     const discord = makeChatSdkDiscord(adapter)
 
     const context = await Effect.runPromise(discord.fetchContext(scope, 30))
-    const history = await Effect.runPromise(discord.fetchHistory(scope, 2))
     const posted = await Effect.runPromise(discord.postMessage(scope, "reply"))
     await Effect.runPromise(discord.editMessage(scope, posted.id, "edited"))
     await Effect.runPromise(discord.sendTyping(scope))
@@ -105,10 +104,7 @@ describe("makeChatSdkDiscord", () => {
         channelType: "guild"
       }
     ])
-    expect(history).toEqual(context)
     expect(adapter.calls.map((item) => item[0])).toEqual([
-      "encodeThreadId",
-      "fetchMessages",
       "encodeThreadId",
       "fetchMessages",
       "encodeThreadId",
@@ -161,10 +157,8 @@ describe("makeChatSdkDiscord REST operations", () => {
       const discord = makeChatSdkDiscord(adapter, { botToken: "token", apiUrl: "https://discord.test/api" })
 
       const context = await Effect.runPromise(discord.fetchContext(scope, 30))
-      const history = await Effect.runPromise(discord.fetchHistory(scope, 30))
 
       expect(context[0]?.author).toEqual({ id: "u1", displayName: "Alice", nickname: "Ali the Great", isBot: false })
-      expect(history[0]?.author).toEqual({ id: "u1", displayName: "Alice", nickname: "Ali the Great", isBot: false })
     } finally {
       globalThis.fetch = originalFetch
     }

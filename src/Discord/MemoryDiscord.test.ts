@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import type { DiscordMessage, DiscordScope } from "../Schema.ts"
 import { makeMemoryDiscord } from "./MemoryDiscord.ts"
+import { parseDiscordSearchQuery } from "./SearchQuery.ts"
 
 const scope: DiscordScope = { guildId: "g1", channelId: "c1" }
 
@@ -26,14 +27,17 @@ describe("makeMemoryDiscord", () => {
     const discord = makeMemoryDiscord({ context: [message("1"), message("2")] })
 
     const context = await Effect.runPromise(discord.fetchContext(scope, 1))
-    const history = await Effect.runPromise(discord.fetchHistory(scope, 2))
+    const query = parseDiscordSearchQuery("content:2 from:Alice")
+    if (!query.ok) throw new Error(query.error)
+    const search = await Effect.runPromise(discord.searchMessages(scope, query.query, { limit: 2, offset: 0 }))
     const posted = await Effect.runPromise(discord.postMessage(scope, "hello"))
     await Effect.runPromise(discord.editMessage(scope, posted.id, "updated"))
     await Effect.runPromise(discord.addReaction(scope, "m1", "rocket"))
     const attached = await Effect.runPromise(discord.attachFile(scope, "/repo/out.txt"))
 
     expect(context.map((item) => item.id)).toEqual(["2"])
-    expect(history.map((item) => item.id)).toEqual(["1", "2"])
+    expect(search.messages.map((item) => item.id)).toEqual(["2"])
+    expect(search.totalResults).toBe(1)
     expect(posted).toEqual({ id: "posted-1" })
     expect(discord.messages).toEqual([{ scope, content: "hello" }])
     expect(discord.edits).toEqual([{ scope, messageId: "posted-1", content: "updated" }])
