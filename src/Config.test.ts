@@ -22,6 +22,7 @@ describe("loadConfigFromSources", () => {
           "contextMaxChars": 1234,
           "streaming": { "updateIntervalMs": 250, "showToolStatus": false },
           "threads": { "activeByRecentBotParticipation": false },
+          "trigger": { "enabled": false },
           "concurrency": { "strategy": "burst", "globalMaxActiveTurns": 4 },
           "guards": { "ignoreBots": false, "stripMassMentions": false, "redactSecretsInErrors": false, "maxTurnMs": 1000 },
           "tools": { "createThread": true, "editDeleteOwn": true, "pin": true, "followUpMessages": true, "postOtherChannels": true }
@@ -39,6 +40,7 @@ describe("loadConfigFromSources", () => {
     expect(config.streaming.updateInterval).toEqual(Duration.millis(250))
     expect(config.streaming.showToolStatus).toBe(false)
     expect(config.threads.activeByRecentBotParticipation).toBe(false)
+    expect(config.trigger.enabled).toBe(false)
     expect(config.concurrency.strategy).toBe("burst")
     expect(config.concurrency.globalMaxActiveTurns).toBe(4)
     expect(config.guards.ignoreBots).toBe(false)
@@ -61,6 +63,7 @@ describe("loadConfigFromSources", () => {
     expect(config.bridge.host).toBe(defaultConfig.bridge.host)
     expect(config.bridge.port).toBe(8787)
     expect(config.context.messages).toBe(30)
+    expect(config.trigger.enabled).toBe(true)
     expect(config.tools.autoInstall).toBe(true)
     expect("editDeleteOwn" in config.tools).toBe(false)
     expect("pin" in config.tools).toBe(false)

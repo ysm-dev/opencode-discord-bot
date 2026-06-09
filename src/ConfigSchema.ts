@@ -17,6 +17,7 @@ export const RawConfigSchema = Schema.Struct({
   attachmentMaxBytes: Schema.optional(PositiveInt),
   threads: Schema.optional(Schema.Struct({ activeByRecentBotParticipation: OptionalBoolean })),
   tools: Schema.optional(RawToolsSchema),
+  trigger: Schema.optional(Schema.Struct({ enabled: OptionalBoolean })),
   streaming: Schema.optional(
     Schema.Struct({
       updateIntervalMs: Schema.optional(PositiveInt),

@@ -2,9 +2,9 @@ import { Effect } from "effect"
 import type { RuntimeConfig } from "../Config.ts"
 import type { DiscordService } from "../Discord/DiscordPort.ts"
 import type { OpencodeService } from "../Opencode/OpencodePort.ts"
-import { renderOpencodeEvents } from "../Render/Renderer.ts"
 import type { BotIdentity, DiscordMessage } from "../Schema.ts"
 import { assembleContextPrompt } from "./ContextAssembly.ts"
+import { runOpencodePrompt } from "./PromptRunner.ts"
 import { isThreadActiveFromContext, shouldTriggerTurn, toDiscordScope } from "./Triggering.ts"
 
 type HandleOptions = {
@@ -17,8 +17,6 @@ type HandleOptions = {
 type HandleResult = {
   readonly handled: boolean
 }
-
-const redactError = (message: string): string => message.replace(/secret[-_a-z0-9]*/gi, "[redacted]")
 
 export const handleDiscordMessage = Effect.fn("handleDiscordMessage")(function* (
   message: DiscordMessage,
@@ -48,20 +46,14 @@ export const handleDiscordMessage = Effect.fn("handleDiscordMessage")(function* 
     maxAttachmentBytes: options.config.context.attachmentMaxBytes
   })
 
-  const events = options.opencode.runPrompt({
+  yield* runOpencodePrompt({
     prompt: prompt.text,
     parts: prompt.parts,
-    projectDir: options.config.opencode.projectDir,
     scope,
-    ...(options.config.opencode.model === undefined ? {} : { model: options.config.opencode.model }),
-    ...(options.config.opencode.agent === undefined ? {} : { agent: options.config.opencode.agent })
+    config: options.config,
+    discord: options.discord,
+    opencode: options.opencode
   })
-
-  yield* renderOpencodeEvents(events, scope, options.config, options.discord).pipe(
-    Effect.catchTag("OpencodeError", (error) =>
-      options.discord.postMessage(scope, `opencode is unavailable or returned an error: ${redactError(error.message)}`)
-    )
-  )
 
   return { handled: true } satisfies HandleResult
 })

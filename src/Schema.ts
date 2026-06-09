@@ -101,6 +101,18 @@ export type ToolRequest = {
 
 export type ToolResponse = { readonly ok: true; readonly result: unknown } | { readonly ok: false; readonly error: string }
 
+export type TriggerRequest = {
+  readonly guildId: Snowflake
+  readonly channelId: Snowflake
+  readonly threadId?: Snowflake
+  readonly prompt: string
+  readonly model?: string
+  readonly agent?: string
+  readonly name?: string
+}
+
+export type TriggerResponse = { readonly ok: true; readonly accepted: true } | { readonly ok: false; readonly error: string }
+
 export type OpencodeEvent =
   | { readonly type: "text-delta"; readonly id?: string; readonly text: string }
   | { readonly type: "text-snapshot"; readonly id?: string; readonly text: string }
@@ -126,5 +138,20 @@ export const ToolRequestSchema = Schema.Struct({
 
 export const ToolResponseSchema = Schema.Union([
   Schema.Struct({ ok: Schema.Literal(true), result: Schema.Unknown }),
+  Schema.Struct({ ok: Schema.Literal(false), error: Schema.String })
+])
+
+export const TriggerRequestSchema = Schema.Struct({
+  guildId: Schema.String,
+  channelId: Schema.String,
+  threadId: Schema.optional(Schema.String),
+  prompt: Schema.String,
+  model: Schema.optional(Schema.String),
+  agent: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String)
+})
+
+export const TriggerResponseSchema = Schema.Union([
+  Schema.Struct({ ok: Schema.Literal(true), accepted: Schema.Literal(true) }),
   Schema.Struct({ ok: Schema.Literal(false), error: Schema.String })
 ])

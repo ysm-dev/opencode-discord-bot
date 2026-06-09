@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { defaultConfig } from "../Config.ts"
 import { makeMemoryDiscord } from "../Discord/MemoryDiscord.ts"
+import type { TriggerRequest } from "../Schema.ts"
 import { startLoopbackServer } from "./LoopbackServer.ts"
 
 describe("startLoopbackServer", () => {
@@ -88,6 +89,75 @@ describe("startLoopbackServer", () => {
           const body = yield* Effect.tryPromise(() => response.json())
 
           expect(body).toEqual({ ok: false, error: "Discord target is outside the active turn scope" })
+        })
+      )
+    )
+  })
+
+  test("accepts POST /trigger and starts an external trigger turn", async () => {
+    const triggers: Array<TriggerRequest> = []
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* startLoopbackServer({
+            port: 0,
+            config: defaultConfig,
+            projectDir: "/repo",
+            discord: makeMemoryDiscord(),
+            startTriggeredTurn: (request) => Effect.sync(() => triggers.push(request)).pipe(Effect.asVoid)
+          })
+          const response = yield* Effect.tryPromise(() =>
+            fetch(`${server.url}/trigger`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ guildId: "g1", channelId: "c1", prompt: "Summarize today's channel conversation", name: "nightly" })
+            })
+          )
+          const body = yield* Effect.tryPromise(() => response.json())
+
+          expect(response.status).toBe(202)
+          expect(body).toEqual({ ok: true, accepted: true })
+          expect(triggers).toEqual([{ guildId: "g1", channelId: "c1", prompt: "Summarize today's channel conversation", name: "nightly" }])
+        })
+      )
+    )
+  })
+
+  test("reports disabled and invalid trigger requests", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* startLoopbackServer({ port: 0, config: defaultConfig, projectDir: "/repo", discord: makeMemoryDiscord() })
+          const disabled = yield* Effect.tryPromise(() =>
+            fetch(`${server.url}/trigger`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ guildId: "g1", channelId: "c1", prompt: "run" })
+            })
+          )
+          const badJson = yield* Effect.tryPromise(() =>
+            fetch(`${server.url}/trigger`, { method: "POST", headers: { "content-type": "application/json" }, body: "not-json" })
+          )
+          const emptyPrompt = yield* Effect.tryPromise(() =>
+            fetch(`${server.url}/trigger`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ guildId: "g1", channelId: "c1", prompt: "   " })
+            })
+          )
+          const dmTarget = yield* Effect.tryPromise(() =>
+            fetch(`${server.url}/trigger`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ guildId: "g1", channelId: "dm", prompt: "run" })
+            })
+          )
+
+          expect(yield* Effect.tryPromise(() => disabled.json())).toEqual({ ok: false, error: "Triggers are not enabled" })
+          expect(yield* Effect.tryPromise(() => badJson.json())).toEqual({ ok: false, error: "Request body must be valid JSON" })
+          expect(yield* Effect.tryPromise(() => emptyPrompt.json())).toEqual({ ok: false, error: "Trigger prompt must not be empty" })
+          expect(yield* Effect.tryPromise(() => dmTarget.json())).toEqual({ ok: false, error: "Discord DMs are not supported" })
         })
       )
     )

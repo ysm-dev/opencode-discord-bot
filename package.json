@@ -1,6 +1,6 @@
 {
   "name": "opencode-discord-bot",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Discord bot bridge for a self-hosted opencode instance",
   "type": "module",
   "main": "src/Main.ts",

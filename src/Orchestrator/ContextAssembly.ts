@@ -17,6 +17,14 @@ type ContextInput = {
   readonly maxAttachmentBytes: number
 }
 
+type ScheduledPromptInput = {
+  readonly botUserId: string
+  readonly scope: DiscordScope
+  readonly prompt: string
+  readonly name?: string | undefined
+  readonly maxChars: number
+}
+
 const preamble = (botUserId: string) =>
   `Discord bridge context for <@${botUserId}>. Plain assistant text is streamed to Discord automatically; do not use bridge tools to send messages. <@id> pings that user in Discord; use the participants list to map server nicknames/display names to their <@id> values. When a display name is shared, the message header also includes that author's <@id>. For non-message bridge tools, combine the discord default scope or message target override with the header messageId. Do not emit @everyone, @here, or role pings unless explicitly allowed.`
 
@@ -180,6 +188,16 @@ export const assembleContextPrompt = (input: ContextInput): ContextPrompt => {
   return {
     messages,
     parts: attachmentParts(messages, input.maxAttachmentBytes),
+    text: text.length <= input.maxChars ? text : text.slice(0, input.maxChars)
+  }
+}
+
+export const assembleScheduledPrompt = (input: ScheduledPromptInput): ContextPrompt => {
+  const name = input.name === undefined ? "(scheduled trigger)" : `(scheduled trigger: ${input.name})`
+  const text = [preamble(input.botUserId), defaultScopeSummary(input.scope), name, input.prompt].join("\n\n")
+  return {
+    messages: [],
+    parts: [],
     text: text.length <= input.maxChars ? text : text.slice(0, input.maxChars)
   }
 }

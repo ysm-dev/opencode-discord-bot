@@ -12,9 +12,10 @@ import type { OpencodeService } from "./Opencode/OpencodePort.ts"
 import { makeLiveSdkOpencode } from "./Opencode/SdkOpencode.ts"
 import { handleDiscordMessage } from "./Orchestrator/Orchestrator.ts"
 import { handleStopCommand } from "./Orchestrator/StopCommand.ts"
+import { runTriggeredPrompt } from "./Orchestrator/TriggeredPrompt.ts"
 import { shouldTriggerTurn, toDiscordScope } from "./Orchestrator/Triggering.ts"
 import { createTurnManager, type TurnManager } from "./Orchestrator/TurnManager.ts"
-import type { BotIdentity, DiscordMessage, DiscordScope, ToolRequest } from "./Schema.ts"
+import type { BotIdentity, DiscordMessage, DiscordScope, ToolRequest, TriggerRequest } from "./Schema.ts"
 import { ensureDiscordTools } from "./Tools/Scaffolding.ts"
 
 type ApplicationOptions = {
@@ -41,6 +42,11 @@ export const makeApplication = (options: ApplicationOptions) => {
       maxTurn: options.config.guards.maxTurn
     })
   const activeScopeKey = (scope: DiscordScope): string => `${scope.guildId}:${scope.channelId}:${scope.threadId ?? ""}`
+  const scopeFromTrigger = (request: TriggerRequest): DiscordScope => ({
+    guildId: request.guildId,
+    channelId: request.channelId,
+    ...(request.threadId === undefined ? {} : { threadId: request.threadId })
+  })
   const handleMessage = (message: DiscordMessage, skippedMessages: ReadonlyArray<DiscordMessage> = []) => {
     const scope = toDiscordScope(message)
     const key = activeScopeKey(scope)
@@ -69,6 +75,23 @@ export const makeApplication = (options: ApplicationOptions) => {
       )
       queuedMessages.set(key, { latest: message, skipped })
     })
+
+  const handleTriggeredPrompt = (request: TriggerRequest) => {
+    const scope = scopeFromTrigger(request)
+    const key = activeScopeKey(scope)
+    return Effect.gen(function* () {
+      yield* Effect.sync(() => activeToolScopes.set(key, scope))
+      yield* runTriggeredPrompt(request, scope, options)
+    }).pipe(
+      Effect.catch(() => Effect.void),
+      Effect.ensuring(Effect.sync(() => activeToolScopes.delete(key)))
+    )
+  }
+
+  const startTriggeredTurn = (request: TriggerRequest) => {
+    const scope = scopeFromTrigger(request)
+    return turns.startTurn(scope, undefined, handleTriggeredPrompt(request)).pipe(Effect.asVoid)
+  }
 
   return {
     start: Effect.tryPromise({
@@ -104,6 +127,7 @@ export const makeApplication = (options: ApplicationOptions) => {
           .pipe(Effect.asVoid)
       })
     },
+    startTriggeredTurn,
     handleStop: (scope: DiscordScope) => handleStopCommand(scope, turns, options.discord),
     handleTool: (request: ToolRequest) =>
       handleToolRequest(request, options.config, options.config.opencode.projectDir, options.discord, {
@@ -115,7 +139,8 @@ export const makeApplication = (options: ApplicationOptions) => {
         config: options.config,
         projectDir: options.config.opencode.projectDir,
         discord: options.discord,
-        getAllowedScopes: () => [...activeToolScopes.values()]
+        getAllowedScopes: () => [...activeToolScopes.values()],
+        ...(options.config.trigger.enabled ? { startTriggeredTurn } : {})
       })
   }
 }

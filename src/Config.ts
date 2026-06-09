@@ -47,6 +47,9 @@ export type RuntimeConfig = {
     readonly activeByRecentBotParticipation: boolean
   }
   readonly tools: ToolConfig
+  readonly trigger: {
+    readonly enabled: boolean
+  }
   readonly streaming: {
     readonly updateInterval: Duration.Duration
     readonly placeholderText: string | null
@@ -93,6 +96,9 @@ export const defaultConfig: RuntimeConfig = {
     attachFiles: true,
     searchMessages: true,
     createThread: false
+  },
+  trigger: {
+    enabled: true
   },
   streaming: {
     updateInterval: Duration.millis(500),
@@ -206,6 +212,7 @@ export const loadConfigFromSources = Effect.fn("loadConfigFromSources")(function
   const opencodePort = yield* parsePort(sources.env.OPENCODE_PORT, defaultConfig.opencode.port, "OPENCODE_PORT")
   const bridgePort = yield* parsePort(sources.env.DISCORD_BRIDGE_PORT, defaultConfig.bridge.port, "DISCORD_BRIDGE_PORT")
   const tools = readRecord(file, "tools")
+  const trigger = readRecord(file, "trigger")
   const streaming = readRecord(file, "streaming")
   const threads = readRecord(file, "threads")
   const concurrency = readRecord(file, "concurrency")
@@ -256,6 +263,9 @@ export const loadConfigFromSources = Effect.fn("loadConfigFromSources")(function
       attachFiles: readBoolean(tools, "attachFiles", defaultConfig.tools.attachFiles),
       searchMessages: readBoolean(tools, "searchMessages", defaultConfig.tools.searchMessages),
       createThread: readBoolean(tools, "createThread", defaultConfig.tools.createThread)
+    },
+    trigger: {
+      enabled: readBoolean(trigger, "enabled", defaultConfig.trigger.enabled)
     },
     streaming: {
       updateInterval: Duration.millis(readNumber(streaming, "updateIntervalMs", 500)),
