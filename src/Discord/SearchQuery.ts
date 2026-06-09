@@ -37,26 +37,6 @@ type SearchHandler = (state: SearchState, value: string, key: string) => Discord
 
 const snowflakePattern = /^\d{5,32}$/
 
-export const emptyDiscordSearchQuery = (): DiscordSearchQuery => ({
-  authors: [],
-  authorNames: [],
-  authorTypes: [],
-  channels: [],
-  channelNames: [],
-  mentions: [],
-  mentionNames: [],
-  roleMentions: [],
-  repliedToUsers: [],
-  repliedToUserNames: [],
-  repliedToMessages: [],
-  has: [],
-  embedTypes: [],
-  embedProviders: [],
-  linkHostnames: [],
-  attachmentFilenames: [],
-  attachmentExtensions: []
-})
-
 const createState = (): SearchState => ({
   content: [],
   authors: [],

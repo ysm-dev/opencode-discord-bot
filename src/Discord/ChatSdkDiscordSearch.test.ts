@@ -91,10 +91,74 @@ describe("makeChatSdkDiscord search", () => {
     expect(requests[0]).toContain("has=link")
     expect(requests[1]).toBe("https://discord.test/api/guilds/g1/members/123")
   })
+
+  test("resolves Discord search user and channel names", async () => {
+    const requests: Array<string> = []
+    const originalFetch = globalThis.fetch
+    const fakeFetch: typeof fetch = Object.assign(
+      (input: URL | RequestInfo) => {
+        const url = String(input)
+        requests.push(url)
+        if (url.includes("/members/search")) return Promise.resolve(memberSearchResponse(url))
+        if (url.endsWith("/guilds/g1/channels")) return Promise.resolve(channelsResponse())
+        return Promise.resolve(url.includes("/messages/search") ? searchResponse() : memberResponse())
+      },
+      { preconnect: originalFetch.preconnect }
+    )
+    globalThis.fetch = fakeFetch
+
+    try {
+      const parsed = parseDiscordSearchQuery("from:Alice in:general mentions:Bob reply_to:Carol")
+      if (!parsed.ok) throw new Error(parsed.error)
+      const discord = makeChatSdkDiscord(new FakeDiscordAdapter(), { botToken: "token", apiUrl: "https://discord.test/api" })
+      const result = await Effect.runPromise(discord.searchMessages(scope, parsed.query, { limit: 25, offset: 0 }))
+
+      expect(result.messages).toHaveLength(1)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+
+    const searchUrl = requests.find((url) => url.includes("/messages/search")) ?? ""
+    expect(searchUrl).toContain("author_id=123")
+    expect(searchUrl).toContain("channel_id=789")
+    expect(searchUrl).toContain("mentions=456")
+    expect(searchUrl).toContain("replied_to_user_id=777")
+  })
+
+  test("fails when search names cannot be resolved", async () => {
+    const originalFetch = globalThis.fetch
+    const fakeFetch: typeof fetch = Object.assign(
+      () => Promise.resolve(new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } })),
+      { preconnect: originalFetch.preconnect }
+    )
+    globalThis.fetch = fakeFetch
+
+    try {
+      const parsed = parseDiscordSearchQuery("from:Missing")
+      if (!parsed.ok) throw new Error(parsed.error)
+      const discord = makeChatSdkDiscord(new FakeDiscordAdapter(), { botToken: "token", apiUrl: "https://discord.test/api" })
+
+      await expect(Effect.runPromise(discord.searchMessages(scope, parsed.query, { limit: 25, offset: 0 }))).rejects.toMatchObject({
+        _tag: "DiscordError",
+        message: "Unable to resolve Discord user Missing; use an ID or mention"
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
 
 const memberResponse = (): Response =>
   new Response(JSON.stringify({ nick: "Ali the Great" }), { status: 200, headers: { "content-type": "application/json" } })
+
+const memberSearchResponse = (url: string): Response => {
+  const query = new URL(url).searchParams.get("query")
+  const id = query === "Carol" ? "777" : query === "Bob" ? "456" : "123"
+  return new Response(JSON.stringify([{ user: { id } }]), { status: 200, headers: { "content-type": "application/json" } })
+}
+
+const channelsResponse = (): Response =>
+  new Response(JSON.stringify([{ id: "789", name: "general" }]), { status: 200, headers: { "content-type": "application/json" } })
 
 const searchResponse = (): Response =>
   new Response(

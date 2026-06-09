@@ -35,6 +35,26 @@ describe("parseDiscordSearchQuery", () => {
     expect(result.query.mentionEveryone).toBe(false)
   })
 
+  test("parses full Discord API filter aliases", () => {
+    const result = parseDiscordSearchQuery(
+      "role:<@&111> reply_to:Carol replied_to_message:222 has:file embed_provider:Tenor filename:notes.txt ext:.md max_id:999 min_id:888 slop:3 nsfw:yes everyone:1"
+    )
+    if (!result.ok) throw new Error(result.error)
+
+    expect(result.query.roleMentions).toEqual(["111"])
+    expect(result.query.repliedToUserNames).toEqual(["Carol"])
+    expect(result.query.repliedToMessages).toEqual(["222"])
+    expect(result.query.has).toEqual(["file"])
+    expect(result.query.embedProviders).toEqual(["Tenor"])
+    expect(result.query.attachmentFilenames).toEqual(["notes.txt"])
+    expect(result.query.attachmentExtensions).toEqual(["md"])
+    expect(result.query.maxId).toBe("999")
+    expect(result.query.minId).toBe("888")
+    expect(result.query.slop).toBe(3)
+    expect(result.query.includeNsfw).toBe(true)
+    expect(result.query.mentionEveryone).toBe(true)
+  })
+
   test("converts date filters to Discord snowflake IDs", () => {
     const result = parseDiscordSearchQuery("after:2026-06-05 during:2026-06-06")
     if (!result.ok) throw new Error(result.error)
@@ -49,5 +69,8 @@ describe("parseDiscordSearchQuery", () => {
       ok: false,
       error: "Role search requires a role ID or role mention: moderators"
     })
+    expect(parseDiscordSearchQuery("slop:101")).toEqual({ ok: false, error: "Invalid slop: 101" })
+    expect(parseDiscordSearchQuery("sort:random")).toEqual({ ok: false, error: "Invalid sort: value random" })
+    expect(parseDiscordSearchQuery("order:newest")).toEqual({ ok: false, error: "Invalid order: value newest" })
   })
 })
