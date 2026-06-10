@@ -15,11 +15,61 @@ const isBase64DataUrl = (value: string): boolean => value.startsWith("data:") &&
 
 const partLabel = (part: OpencodePromptFilePart): string => part.filename ?? part.url
 
+const normalizeMime = (value: string | null | undefined): string | undefined => {
+  if (value === null || value === undefined) return undefined
+  const mime = value.split(";", 1)[0]?.trim().toLowerCase()
+  return mime === undefined || mime.length === 0 ? undefined : mime
+}
+
+const imageMime = (value: string | null | undefined): string | undefined => {
+  const mime = normalizeMime(value)
+  return mime?.startsWith("image/") ? mime : undefined
+}
+
+const hasSignature = (bytes: Uint8Array, signature: ReadonlyArray<number>, offset = 0): boolean =>
+  bytes.length >= offset + signature.length && signature.every((value, index) => bytes[offset + index] === value)
+
+const detectedImageMime = (bytes: Uint8Array): string | undefined => {
+  if (hasSignature(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
+  if (hasSignature(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
+  if (hasSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x37, 0x61]) || hasSignature(bytes, [0x47, 0x49, 0x46, 0x38, 0x39, 0x61])) {
+    return "image/gif"
+  }
+  if (hasSignature(bytes, [0x52, 0x49, 0x46, 0x46]) && hasSignature(bytes, [0x57, 0x45, 0x42, 0x50], 8)) return "image/webp"
+  return undefined
+}
+
+type Base64DataUrl = {
+  readonly mime?: string
+  readonly data: string
+}
+
+const base64DataUrl = (value: string): Base64DataUrl | undefined => {
+  if (!isBase64DataUrl(value)) return undefined
+  const comma = value.indexOf(",")
+  if (comma < 0) return undefined
+  const metadata = value.slice(5, comma)
+  const mime = imageMime(metadata.split(";", 1)[0])
+  return { ...(mime === undefined ? {} : { mime }), data: value.slice(comma + 1) }
+}
+
+const imageDataUrl = (mime: string, bytes: Uint8Array | Buffer): string => `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`
+
+const normalizeImageDataUrlPart = (part: OpencodePromptFilePart, declaredMime: string): OpencodePromptFilePart => {
+  const dataUrl = base64DataUrl(part.url)
+  if (dataUrl === undefined) return part
+  const bytes = Buffer.from(dataUrl.data, "base64")
+  const mime = detectedImageMime(bytes) ?? dataUrl.mime ?? declaredMime
+  return { ...part, mime, url: imageDataUrl(mime, bytes) }
+}
+
 const imageError = (action: "fetch" | "read", part: OpencodePromptFilePart, detail: string) =>
   new PromptPartError({ message: `failed to ${action} image attachment ${partLabel(part)}: ${detail}` })
 
 const fetchImagePart = Effect.fn("fetchImagePartDataUrl")(function* (part: OpencodePromptFilePart) {
-  if (!part.mime.startsWith("image/") || isBase64DataUrl(part.url)) return part
+  const declaredMime = imageMime(part.mime)
+  if (declaredMime === undefined) return part
+  if (isBase64DataUrl(part.url)) return normalizeImageDataUrlPart(part, declaredMime)
 
   const response = yield* Effect.tryPromise({
     try: () => fetch(part.url),
@@ -33,7 +83,9 @@ const fetchImagePart = Effect.fn("fetchImagePartDataUrl")(function* (part: Openc
     try: () => response.arrayBuffer(),
     catch: (cause) => imageError("read", part, causeText(cause))
   })
-  return { ...part, url: `data:${part.mime};base64,${Buffer.from(buffer).toString("base64")}` }
+  const bytes = new Uint8Array(buffer)
+  const mime = detectedImageMime(bytes) ?? imageMime(response.headers.get("content-type")) ?? declaredMime
+  return { ...part, mime, url: imageDataUrl(mime, bytes) }
 })
 
 export const preparePromptParts = Effect.fn("prepareOpencodePromptParts")(function* (
